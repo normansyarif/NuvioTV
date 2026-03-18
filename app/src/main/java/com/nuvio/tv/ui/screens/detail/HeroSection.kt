@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.Image
+import androidx.compose.material3.CircularProgressIndicator as MaterialCircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,7 +62,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import android.util.Log
 import com.nuvio.tv.R
-import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MDBListRatings
 import com.nuvio.tv.domain.model.Video
@@ -76,7 +76,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.painter.Painter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
-import java.util.Locale
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -84,6 +83,7 @@ fun HeroContentSection(
     meta: Meta,
     nextEpisode: Video?,
     nextToWatch: NextToWatch?,
+    isEpisodeWatchedStatusLoading: Boolean = false,
     onPlayClick: () -> Unit,
     onPlayLongPress: (() -> Unit)? = null,
     isInLibrary: Boolean,
@@ -107,12 +107,12 @@ fun HeroContentSection(
     val isSeriesApi = remember(meta.apiType) {
         meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true)
     }
+    val isPlayLoading = isSeriesApi && isEpisodeWatchedStatusLoading
     val logoModel = remember(context, meta.logo) {
         meta.logo?.let { logo ->
             ImageRequest.Builder(context)
                 .data(logo)
                 .crossfade(true)
-                .decoderFactory(SvgDecoder.Factory())
                 .build()
         }
     }
@@ -233,6 +233,7 @@ fun HeroContentSection(
                                 nextEpisode != null -> stringResource(R.string.hero_play_episode, nextEpisode.season ?: 0, nextEpisode.episode ?: 0)
                                 else -> stringResource(R.string.hero_play)
                             },
+                            isLoading = isPlayLoading,
                             onClick = onPlayClick,
                             onLongPress = onPlayLongPress,
                             focusRequester = playButtonFocusRequester,
@@ -331,6 +332,7 @@ fun HeroContentSection(
 @Composable
 private fun PlayButton(
     text: String,
+    isLoading: Boolean = false,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
@@ -352,10 +354,14 @@ private fun PlayButton(
 
     Button(
         onClick = {
-            if (longPressTriggered) {
-                longPressTriggered = false
+            if (!isLoading) {
+                if (longPressTriggered) {
+                    longPressTriggered = false
+                } else {
+                    onClick()
+                }
             } else {
-                onClick()
+                longPressTriggered = false
             }
         },
         modifier = Modifier
@@ -397,6 +403,7 @@ private fun PlayButton(
                 false
             }
             .focusProperties { up = FocusRequester.Cancel },
+        enabled = !isLoading,
         colors = ButtonDefaults.colors(
             containerColor = androidx.compose.ui.graphics.Color.White,
             focusedContainerColor = androidx.compose.ui.graphics.Color.White,
@@ -418,11 +425,20 @@ private fun PlayButton(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(
-                painter = playPainter,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
+            if (isLoading) {
+                MaterialCircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = Color.Black,
+                    trackColor = Color.Transparent
+                )
+            } else {
+                Icon(
+                    painter = playPainter,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
             Text(
                 text = text,
                 style = MaterialTheme.typography.labelLarge
@@ -575,15 +591,8 @@ private fun MetaInfoRow(
     val context = LocalContext.current
     val genresText = remember(meta.genres) { meta.genres.joinToString(" • ") }
     val runtimeText = remember(meta.runtime) { meta.runtime?.let { formatRuntime(it) } }
-    val yearText = remember(meta.releaseInfo, meta.released, meta.type) {
-        if (meta.type == ContentType.MOVIE) {
-            meta.released
-                ?.let { runCatching { java.time.OffsetDateTime.parse(it).toLocalDate() }.getOrNull() }
-                ?.let { java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.getDefault()).format(it) }
-                ?: meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
-        } else {
-            meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
-        }
+    val yearText = remember(meta.releaseInfo) {
+        meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
     }
     val imdbRating = if (hideImdbRating) null else meta.imdbRating
     val shouldShowImdbRating = imdbRating != null
@@ -783,15 +792,14 @@ private fun CombinedMetaBadge(
 }
 
 private fun normalizeCountryLabel(raw: String): String {
-    val displayLocale = Locale.getDefault()
     return raw
         .split(",")
         .joinToString(", ") { part ->
-            val code = part.trim()
-            if (code.matches(Regex("[A-Za-z]{2}"))) {
-                Locale("", code).getDisplayCountry(displayLocale).takeIf { it.isNotBlank() } ?: code
+            val trimmed = part.trim()
+            if (trimmed.matches(Regex("[A-Za-z]{2,3}"))) {
+                trimmed.uppercase()
             } else {
-                code
+                trimmed
             }
         }
 }
@@ -887,30 +895,7 @@ private fun formatMDBListRating(provider: String, rating: Double): String {
 }
 
 private fun formatRuntime(runtime: String): String {
-    val trimmed = runtime.trim()
-    // Already in "Xh Ym" or "Xh" format
-    if (trimmed.contains('h') || trimmed.contains('m')) {
-        val hours = Regex("(\\d+)\\s*h").find(trimmed)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-        val mins = Regex("(\\d+)\\s*m").find(trimmed)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-        val total = hours * 60 + mins
-        if (total > 0) return if (total >= 60) {
-            val h = total / 60; val m = total % 60
-            if (m > 0) "${h}h ${m}m" else "${h}h"
-        } else "${total}m"
-    }
-    // "H:MM" or "HH:MM" format
-    if (trimmed.contains(':')) {
-        val parts = trimmed.split(':')
-        val hours = parts.getOrNull(0)?.toIntOrNull() ?: 0
-        val mins = parts.getOrNull(1)?.toIntOrNull() ?: 0
-        val total = hours * 60 + mins
-        if (total > 0) return if (total >= 60) {
-            val m = total % 60
-            if (m > 0) "${hours}h ${m}m" else "${hours}h"
-        } else "${total}m"
-    }
-    // Plain number (minutes)
-    val minutes = trimmed.filter { it.isDigit() }.toIntOrNull() ?: return runtime
+    val minutes = runtime.filter { it.isDigit() }.toIntOrNull() ?: return runtime
     return if (minutes >= 60) {
         val hours = minutes / 60
         val mins = minutes % 60

@@ -66,9 +66,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import coil.request.ImageRequest
-import coil.decode.SvgDecoder
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import com.nuvio.tv.ui.util.localizeEpisodeTitle
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
@@ -403,13 +401,11 @@ private fun LeftContentSection(
 ) {
     val context = LocalContext.current
     var logoLoadFailed by remember(logo) { mutableStateOf(false) }
-    val density = LocalDensity.current
     val logoModel = remember(context, logo) {
         logo?.let { image ->
             ImageRequest.Builder(context)
                 .data(image)
                 .crossfade(false)
-                .decoderFactory(SvgDecoder.Factory())
                 .build()
         }
     }
@@ -889,7 +885,6 @@ private fun StreamCard(
             ImageRequest.Builder(context)
                 .data(logo)
                 .crossfade(false)
-                .decoderFactory(SvgDecoder.Factory())
                 .build()
         }
     }

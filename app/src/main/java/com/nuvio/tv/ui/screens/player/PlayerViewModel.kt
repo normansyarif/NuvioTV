@@ -38,7 +38,6 @@ class PlayerViewModel @Inject constructor(
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     private val layoutPreferenceDataStore: com.nuvio.tv.data.local.LayoutPreferenceDataStore,
     private val watchedItemsPreferences: com.nuvio.tv.data.local.WatchedItemsPreferences,
-    private val trackPreferenceDataStore: com.nuvio.tv.data.local.TrackPreferenceDataStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -58,7 +57,6 @@ class PlayerViewModel @Inject constructor(
         streamLinkCacheDataStore = streamLinkCacheDataStore,
         layoutPreferenceDataStore = layoutPreferenceDataStore,
         watchedItemsPreferences = watchedItemsPreferences,
-        trackPreferenceDataStore = trackPreferenceDataStore,
         savedStateHandle = savedStateHandle,
         scope = viewModelScope
     )

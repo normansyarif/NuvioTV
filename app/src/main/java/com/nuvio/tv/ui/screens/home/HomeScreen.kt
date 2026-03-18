@@ -7,12 +7,15 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -61,6 +64,7 @@ private data class HomePosterOptionsTarget(
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
+    refreshRequestToken: Int = 0,
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit = { item ->
         onNavigateToDetail(
@@ -102,6 +106,12 @@ fun HomeScreen(
     LaunchedEffect(hasCatalogContent) {
         if (hasCatalogContent) {
             hasEnteredCatalogContent = true
+        }
+    }
+
+    LaunchedEffect(refreshRequestToken) {
+        if (refreshRequestToken > 0) {
+            viewModel.refreshAllCatalogs()
         }
     }
 
@@ -261,6 +271,32 @@ fun HomeScreen(
                         StartupAuthNotice.NUVIO -> stringResource(R.string.auth_notice_nuvio_logged_out)
                         StartupAuthNotice.TRAKT -> stringResource(R.string.auth_notice_trakt_logged_out)
                     },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioColors.TextPrimary
+                )
+            }
+        }
+
+        if (uiState.isLoading && hasAnyContent) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 24.dp, end = 24.dp)
+                    .background(
+                        color = Color(0xD91A1A1A),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    color = NuvioColors.Primary,
+                    strokeWidth = 2.5.dp
+                )
+                Text(
+                    text = stringResource(R.string.home_refreshing_catalogs),
                     style = MaterialTheme.typography.bodyMedium,
                     color = NuvioColors.TextPrimary
                 )

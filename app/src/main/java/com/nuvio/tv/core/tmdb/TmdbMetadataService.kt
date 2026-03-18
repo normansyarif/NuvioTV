@@ -111,7 +111,7 @@ class TmdbMetadataService @Inject constructor(
                 val rating = details?.voteAverage
                 val runtime = details?.runtime ?: details?.episodeRunTime?.firstOrNull()
                 val countries = details?.productionCountries
-                    ?.mapNotNull { it.iso31661?.trim()?.uppercase()?.takeIf { code -> code.isNotBlank() } }
+                    ?.mapNotNull { it.name?.trim()?.takeIf { name -> name.isNotBlank() } }
                     ?.takeIf { it.isNotEmpty() }
                     ?: details?.originCountry?.takeIf { it.isNotEmpty() }
                 val language = details?.originalLanguage?.takeIf { it.isNotBlank() }
@@ -561,35 +561,24 @@ class TmdbMetadataService @Inject constructor(
 
     suspend fun fetchPersonDetail(
         personId: Int,
-        preferCrewCredits: Boolean? = null,
-        language: String = "en"
+        preferCrewCredits: Boolean? = null
     ): PersonDetail? =
         withContext(Dispatchers.IO) {
-            val normalizedLanguage = normalizeTmdbLanguage(language)
-            val cacheKey = "$personId:${preferCrewCredits?.toString() ?: "auto"}:$normalizedLanguage"
+            val cacheKey = "$personId:${preferCrewCredits?.toString() ?: "auto"}"
             personCache[cacheKey]?.let { return@withContext it }
 
             try {
                 val (person, credits) = coroutineScope {
                     val personDeferred = async {
-                        tmdbApi.getPersonDetails(personId, TMDB_API_KEY, normalizedLanguage).body()
+                        tmdbApi.getPersonDetails(personId, TMDB_API_KEY).body()
                     }
                     val creditsDeferred = async {
-                        tmdbApi.getPersonCombinedCredits(personId, TMDB_API_KEY, normalizedLanguage).body()
+                        tmdbApi.getPersonCombinedCredits(personId, TMDB_API_KEY).body()
                     }
                     Pair(personDeferred.await(), creditsDeferred.await())
                 }
 
                 if (person == null) return@withContext null
-
-                // If biography is empty and language is not English, fetch English fallback
-                val biography = if (person.biography.isNullOrBlank() && normalizedLanguage != "en") {
-                    runCatching {
-                        tmdbApi.getPersonDetails(personId, TMDB_API_KEY, "en").body()?.biography
-                    }.getOrNull()
-                } else {
-                    person.biography
-                }?.takeIf { it.isNotBlank() }
 
                 val preferCrewFilmography = preferCrewCredits ?: shouldPreferCrewCredits(person.knownForDepartment)
 
@@ -612,7 +601,7 @@ class TmdbMetadataService @Inject constructor(
                 val detail = PersonDetail(
                     tmdbId = person.id,
                     name = person.name ?: "Unknown",
-                    biography = biography,
+                    biography = person.biography?.takeIf { it.isNotBlank() },
                     birthday = person.birthday?.takeIf { it.isNotBlank() },
                     deathday = person.deathday?.takeIf { it.isNotBlank() },
                     placeOfBirth = person.placeOfBirth?.takeIf { it.isNotBlank() },

@@ -119,7 +119,6 @@ class HomeViewModel @Inject constructor(
     internal var heroEnrichmentJob: Job? = null
     internal var lastHeroEnrichmentSignature: String? = null
     internal var lastHeroEnrichedItems: List<MetaPreview> = emptyList()
-    internal var heroItemOrder: List<String> = emptyList()
     internal val prefetchedExternalMetaIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal val externalMetaPrefetchInFlightIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal var externalMetaPrefetchJob: Job? = null
@@ -226,6 +225,12 @@ class HomeViewModel @Inject constructor(
                 isNextUp = event.isNextUp
             )
             HomeEvent.OnRetry -> viewModelScope.launch { loadAllCatalogs(addonsCache, forceReload = true) }
+        }
+    }
+
+    fun refreshAllCatalogs() {
+        viewModelScope.launch {
+            loadAllCatalogs(addonsCache, forceReload = true)
         }
     }
 

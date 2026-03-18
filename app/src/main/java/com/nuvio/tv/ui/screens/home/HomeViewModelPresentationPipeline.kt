@@ -156,8 +156,7 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
                     currentHeroCatalogKeys != prefs.heroCatalogKeys ||
                         previousState.heroSectionEnabled != prefs.heroSectionEnabled ||
                         previousState.homeLayout != prefs.layout ||
-                        previousState.hideUnreleasedContent != prefs.hideUnreleasedContent ||
-                        previousState.posterCardWidthDp != prefs.posterCardWidthDp
+                        previousState.hideUnreleasedContent != prefs.hideUnreleasedContent
                 currentHeroCatalogKeys = prefs.heroCatalogKeys
                 _uiState.update {
                     it.copy(
