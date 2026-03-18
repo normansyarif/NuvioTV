@@ -33,15 +33,14 @@ internal fun coerceStringList(value: Any?): List<String> {
 
 internal fun mapPeople(
     people: List<AppExtrasCastMemberDto>?,
-    roleFallback: String? = null,
-    forceRole: Boolean = false
+    roleFallback: String? = null
 ): List<MetaCastMember> {
     return people.orEmpty().mapNotNull { person ->
         val name = person.name.trim()
         if (name.isBlank()) return@mapNotNull null
         MetaCastMember(
             name = name,
-            character = if (forceRole) roleFallback else person.character?.takeIf { it.isNotBlank() } ?: roleFallback,
+            character = person.character?.takeIf { it.isNotBlank() } ?: roleFallback,
             photo = person.photo?.takeIf { it.isNotBlank() },
             tmdbId = person.tmdbId
         )

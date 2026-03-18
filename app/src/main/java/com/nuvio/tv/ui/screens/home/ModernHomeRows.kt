@@ -648,16 +648,8 @@ private fun ModernCarouselCard(
     val maxLogoWidthPx = remember(maxRequestCardWidth, density) {
         with(density) { (maxRequestCardWidth * 0.62f).roundToPx() }
     }
-    // Freeze the logo URL for row cards - enrichment updates must not cause flickering.
-    // The first non-blank value wins and is never replaced.
-    val frozenLogoUrl = remember(item.key) { mutableStateOf(item.heroPreview.logo) }
-    if (frozenLogoUrl.value.isNullOrBlank() && !item.heroPreview.logo.isNullOrBlank()) {
-        frozenLogoUrl.value = item.heroPreview.logo
-    }
-    val effectiveLogoUrl = frozenLogoUrl.value
-
-    val logoModel = remember(context, effectiveLogoUrl, maxLogoWidthPx, logoHeightPx) {
-        effectiveLogoUrl?.let {
+    val logoModel = remember(context, item.heroPreview.logo, maxLogoWidthPx, logoHeightPx) {
+        item.heroPreview.logo?.let {
             ImageRequest.Builder(context)
                 .data(it)
                 .crossfade(true)
@@ -666,12 +658,12 @@ private fun ModernCarouselCard(
                 .build()
         }
     }
-    var landscapeLogoLoadFailed by remember(effectiveLogoUrl) { mutableStateOf(false) }
+    var landscapeLogoLoadFailed by remember(item.heroPreview.logo) { mutableStateOf(false) }
     val shouldPlayTrailerInCard = playTrailerInExpandedCard && !trailerPreviewUrl.isNullOrBlank()
     val hasImage = !imageUrl.isNullOrBlank()
     val hasLandscapeLogo =
         (useLandscapePosters || isBackdropExpanded) &&
-            !effectiveLogoUrl.isNullOrBlank() &&
+            !item.heroPreview.logo.isNullOrBlank() &&
             !landscapeLogoLoadFailed
     var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }

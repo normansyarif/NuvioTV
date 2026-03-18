@@ -256,6 +256,19 @@ fun MetaDetailsScreen(
         }
     }
 
+    val lifecycleOwner = LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner, uiState.meta?.id) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshEpisodeWatchedStatuses()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -362,6 +375,7 @@ fun MetaDetailsScreen(
                     nextToWatch = uiState.nextToWatch,
                     episodeProgressMap = uiState.episodeProgressMap,
                     watchedEpisodes = uiState.watchedEpisodes,
+                    isEpisodeWatchedStatusLoading = uiState.isEpisodeWatchedStatusLoading,
                     episodeWatchedPendingKeys = uiState.episodeWatchedPendingKeys,
                     blurUnwatchedEpisodes = uiState.blurUnwatchedEpisodes,
                     isMovieWatched = uiState.isMovieWatched,
@@ -595,6 +609,7 @@ private fun MetaDetailsContent(
     nextToWatch: NextToWatch?,
     episodeProgressMap: Map<Pair<Int, Int>, WatchProgress>,
     watchedEpisodes: Set<Pair<Int, Int>>,
+    isEpisodeWatchedStatusLoading: Boolean,
     episodeWatchedPendingKeys: Set<String>,
     blurUnwatchedEpisodes: Boolean,
     isMovieWatched: Boolean,
@@ -1151,6 +1166,7 @@ private fun MetaDetailsContent(
                         meta = meta,
                         nextEpisode = nextEpisode,
                         nextToWatch = nextToWatch,
+                        isEpisodeWatchedStatusLoading = isEpisodeWatchedStatusLoading,
                         onPlayClick = heroPlayClick,
                         onPlayLongPress = if (showManualPlayOption) {
                             { showHeroPlayOptionsDialog = true }
@@ -1215,6 +1231,7 @@ private fun MetaDetailsContent(
                             episodeProgressMap = episodeProgressMap,
                             episodeRatings = episodeImdbRatings,
                             watchedEpisodes = watchedEpisodes,
+                            isEpisodeWatchedStatusLoading = isEpisodeWatchedStatusLoading,
                             episodeWatchedPendingKeys = episodeWatchedPendingKeys,
                             blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                             onEpisodeClick = episodeClick,

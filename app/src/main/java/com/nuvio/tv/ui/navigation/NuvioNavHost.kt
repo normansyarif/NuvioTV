@@ -45,7 +45,8 @@ import com.nuvio.tv.ui.screens.profile.ProfileSelectionScreen
 fun NuvioNavHost(
     navController: NavHostController,
     startDestination: String = Screen.Home.route,
-    hideBuiltInHeaders: Boolean = false
+    hideBuiltInHeaders: Boolean = false,
+    homeRefreshRequestToken: Int = 0
 ) {
     fun isStreamToPlayer(from: String, to: String): Boolean {
         return from.startsWith("stream/") && to.startsWith("player/")
@@ -168,6 +169,7 @@ fun NuvioNavHost(
             }
 
             HomeScreen(
+                refreshRequestToken = homeRefreshRequestToken,
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
                 },

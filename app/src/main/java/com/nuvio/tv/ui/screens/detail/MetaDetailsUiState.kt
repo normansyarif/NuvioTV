@@ -36,6 +36,7 @@ data class MetaDetailsUiState(
     val isMovieWatched: Boolean = false,
     val isMovieWatchedPending: Boolean = false,
     val watchedEpisodes: Set<Pair<Int, Int>> = emptySet(),
+    val isEpisodeWatchedStatusLoading: Boolean = false,
     val episodeWatchedPendingKeys: Set<String> = emptySet(),
     val blurUnwatchedEpisodes: Boolean = false,
     val moreLikeThis: List<MetaPreview> = emptyList(),

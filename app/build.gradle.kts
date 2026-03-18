@@ -29,6 +29,9 @@ fun env(name: String): String? = providers.environmentVariable(name).orNull
 val useDebugReleaseSigning = env("CI_USE_DEBUG_SIGNING").equals("true", ignoreCase = true)
 val releaseStoreFilePath = env("NUVIO_RELEASE_STORE_FILE")
     ?: localProperties.getProperty("NUVIO_RELEASE_STORE_FILE")
+val releaseStoreFile = releaseStoreFilePath?.let(::file) ?: file("../nuviotv.jks")
+val canSignRelease = releaseStoreFile.exists()
+
 val releaseKeyAliasValue = env("NUVIO_RELEASE_KEY_ALIAS")
     ?: localProperties.getProperty("NUVIO_RELEASE_KEY_ALIAS", "nuviotv")
 val releaseKeyPasswordValue = env("NUVIO_RELEASE_KEY_PASSWORD")
@@ -71,14 +74,18 @@ android {
         create("release") {
             keyAlias = releaseKeyAliasValue
             keyPassword = releaseKeyPasswordValue
-            storeFile = releaseStoreFilePath?.let(::file) ?: file("../nuviotv.jks")
+            storeFile = releaseStoreFile
             storePassword = releaseStorePasswordValue
         }
     }
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (canSignRelease) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             isDebuggable = false
             isMinifyEnabled = false
 
@@ -104,7 +111,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = if (useDebugReleaseSigning) {
+            signingConfig = if (useDebugReleaseSigning || !canSignRelease) {
                 signingConfigs.getByName("debug")
             } else {
                 signingConfigs.getByName("release")

@@ -2,6 +2,7 @@ package com.nuvio.tv
 
 import android.os.Bundle
 import android.content.Context
+import android.content.Intent
 import android.content.res.Configuration
 import androidx.core.os.ConfigurationCompat
 import android.util.Log
@@ -50,6 +51,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -116,6 +118,7 @@ import com.nuvio.tv.core.sync.ProfileSyncService
 import com.nuvio.tv.core.sync.StartupSyncService
 import com.nuvio.tv.data.remote.supabase.AvatarRepository
 import com.nuvio.tv.ui.navigation.NuvioNavHost
+import com.nuvio.tv.ui.navigation.NuvioDeepLink
 import com.nuvio.tv.ui.navigation.Screen
 import com.nuvio.tv.ui.components.NuvioScrollDefaults
 import com.nuvio.tv.ui.components.ProfileAvatarCircle
@@ -132,6 +135,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
@@ -148,6 +152,8 @@ data class DrawerItem(
     val iconRes: Int? = null,
     val icon: ImageVector? = null
 )
+
+private const val REFRESH_DRAWER_ROUTE = "__refresh_catalogs__"
 
 private data class MainUiPrefs(
     val theme: AppTheme = AppTheme.WHITE,
@@ -189,6 +195,7 @@ class MainActivity : ComponentActivity() {
     lateinit var avatarRepository: AvatarRepository
 
     private lateinit var jankStats: JankStats
+    private val externalRouteFlow = MutableStateFlow<String?>(null)
 
     @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
     override fun attachBaseContext(newBase: Context) {
@@ -212,6 +219,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        queueExternalRoute(intent)
         setContent {
             var hasSelectedProfileThisSession by remember { mutableStateOf(false) }
             var onboardingCompletedThisSession by remember { mutableStateOf(false) }
@@ -369,6 +377,7 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentRoute = navBackStackEntry?.destination?.route
+                    val externalRoute by externalRouteFlow.collectAsState()
 
                     val view = LocalView.current
                     LaunchedEffect(currentRoute) {
@@ -376,6 +385,13 @@ class MainActivity : ComponentActivity() {
                         if (currentRoute != null) {
                             holder.state?.putState("Screen", currentRoute)
                         }
+                    }
+                    LaunchedEffect(externalRoute) {
+                        val route = externalRoute ?: return@LaunchedEffect
+                        navController.navigate(route) {
+                            launchSingleTop = true
+                        }
+                        externalRouteFlow.value = null
                     }
 
                     val rootRoutes = remember {
@@ -393,18 +409,26 @@ class MainActivity : ComponentActivity() {
                     val strNavLibrary = stringResource(R.string.nav_library)
                     val strNavAddons = stringResource(R.string.nav_addons)
                     val strNavSettings = stringResource(R.string.nav_settings)
+                    val strNavRefresh = stringResource(R.string.nav_refresh)
+                    var homeRefreshRequestToken by remember { mutableStateOf(0) }
                     val drawerItems = remember(
                         strNavHome,
                         strNavSearch,
                         strNavLibrary,
                         strNavAddons,
-                        strNavSettings
+                        strNavSettings,
+                        strNavRefresh
                     ) {
                         listOf(
                             DrawerItem(
                                 route = Screen.Home.route,
                                 label = strNavHome,
                                 icon = Icons.Default.Home
+                            ),
+                            DrawerItem(
+                                route = REFRESH_DRAWER_ROUTE,
+                                label = strNavRefresh,
+                                icon = Icons.Default.Refresh
                             ),
                             DrawerItem(
                                 route = Screen.Search.route,
@@ -453,7 +477,16 @@ class MainActivity : ComponentActivity() {
                             onExitApp = {
                                 finishAffinity()
                                 finishAndRemoveTask()
-                            }
+                            },
+                            onRefreshHomeCatalogs = {
+                                navigateToDrawerRoute(
+                                    navController = navController,
+                                    currentRoute = currentRoute,
+                                    targetRoute = Screen.Home.route
+                                )
+                                homeRefreshRequestToken += 1
+                            },
+                            homeRefreshRequestToken = homeRefreshRequestToken
                         )
                     } else {
                         LegacySidebarScaffold(
@@ -473,7 +506,16 @@ class MainActivity : ComponentActivity() {
                             onExitApp = {
                                 finishAffinity()
                                 finishAndRemoveTask()
-                            }
+                            },
+                            onRefreshHomeCatalogs = {
+                                navigateToDrawerRoute(
+                                    navController = navController,
+                                    currentRoute = currentRoute,
+                                    targetRoute = Screen.Home.route
+                                )
+                                homeRefreshRequestToken += 1
+                            },
+                            homeRefreshRequestToken = homeRefreshRequestToken
                         )
                     }
 
@@ -517,6 +559,19 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        Log.d("MainActivity", "onNewIntent action=${intent.action} data=${intent.data}")
+        queueExternalRoute(intent)
+    }
+
+    private fun queueExternalRoute(intent: Intent?) {
+        val route = NuvioDeepLink.routeFromIntent(intent) ?: return
+        Log.d("MainActivity", "queueExternalRoute route=$route")
+        externalRouteFlow.value = route
+    }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -535,7 +590,9 @@ private fun LegacySidebarScaffold(
     activeProfileAvatarImageUrl: String?,
     showProfileSelector: Boolean,
     onSwitchProfile: () -> Unit,
-    onExitApp: () -> Unit
+    onExitApp: () -> Unit,
+    onRefreshHomeCatalogs: () -> Unit,
+    homeRefreshRequestToken: Int
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val drawerItemFocusRequesters = remember(drawerItems) {
@@ -690,11 +747,15 @@ private fun LegacySidebarScaffold(
                                 selected = selectedDrawerRoute == item.route,
                                 expanded = isExpanded,
                                 onClick = {
-                                    navigateToDrawerRoute(
-                                        navController = navController,
-                                        currentRoute = currentRoute,
-                                        targetRoute = item.route
-                                    )
+                                    if (item.route == REFRESH_DRAWER_ROUTE) {
+                                        onRefreshHomeCatalogs()
+                                    } else {
+                                        navigateToDrawerRoute(
+                                            navController = navController,
+                                            currentRoute = currentRoute,
+                                            targetRoute = item.route
+                                        )
+                                    }
                                     drawerState.setValue(DrawerValue.Closed)
                                     pendingContentFocusTransfer = true
                                 },
@@ -745,7 +806,8 @@ private fun LegacySidebarScaffold(
                 NuvioNavHost(
                     navController = navController,
                     startDestination = startDestination,
-                    hideBuiltInHeaders = hideBuiltInHeaders
+                    hideBuiltInHeaders = hideBuiltInHeaders,
+                    homeRefreshRequestToken = homeRefreshRequestToken
                 )
             }
         }
@@ -848,7 +910,9 @@ private fun ModernSidebarScaffold(
     activeProfileAvatarImageUrl: String?,
     showProfileSelector: Boolean,
     onSwitchProfile: () -> Unit,
-    onExitApp: () -> Unit
+    onExitApp: () -> Unit,
+    onRefreshHomeCatalogs: () -> Unit,
+    homeRefreshRequestToken: Int
 ) {
     val showSidebar = currentRoute in rootRoutes
     val collapsedSidebarWidth = if (sidebarCollapsed) 0.dp else 184.dp
@@ -1103,7 +1167,8 @@ private fun ModernSidebarScaffold(
                 NuvioNavHost(
                     navController = navController,
                     startDestination = startDestination,
-                    hideBuiltInHeaders = hideBuiltInHeaders
+                    hideBuiltInHeaders = hideBuiltInHeaders,
+                    homeRefreshRequestToken = homeRefreshRequestToken
                 )
             }
         }
@@ -1169,11 +1234,15 @@ private fun ModernSidebarScaffold(
                         drawerItemFocusRequesters = drawerItemFocusRequesters,
                         onDrawerItemFocused = { focusedDrawerIndex = it },
                         onDrawerItemClick = { targetRoute ->
-                            navigateToDrawerRoute(
-                                navController = navController,
-                                currentRoute = currentRoute,
-                                targetRoute = targetRoute
-                            )
+                            if (targetRoute == REFRESH_DRAWER_ROUTE) {
+                                onRefreshHomeCatalogs()
+                            } else {
+                                navigateToDrawerRoute(
+                                    navController = navController,
+                                    currentRoute = currentRoute,
+                                    targetRoute = targetRoute
+                                )
+                            }
                             pendingSidebarFocusRequest = false
                             isSidebarExpanded = false
                             sidebarCollapsePending = false

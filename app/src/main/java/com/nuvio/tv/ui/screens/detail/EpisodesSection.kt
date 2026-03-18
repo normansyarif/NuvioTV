@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator as MaterialCircularProgressIndicator
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Schedule
@@ -210,6 +211,7 @@ fun EpisodesRow(
     episodeProgressMap: Map<Pair<Int, Int>, com.nuvio.tv.domain.model.WatchProgress> = emptyMap(),
     episodeRatings: Map<Pair<Int, Int>, Double> = emptyMap(),
     watchedEpisodes: Set<Pair<Int, Int>> = emptySet(),
+    isEpisodeWatchedStatusLoading: Boolean = false,
     episodeWatchedPendingKeys: Set<String> = emptySet(),
     blurUnwatchedEpisodes: Boolean = false,
     onEpisodeClick: (Video) -> Unit,
@@ -306,6 +308,12 @@ fun EpisodesRow(
             val progress = remember(seasonEp, episodeProgressMap) { seasonEp?.let { episodeProgressMap[it] } }
             val imdbRating = remember(seasonEp, episodeRatings) { seasonEp?.let { episodeRatings[it] } }
             val isMarkedWatched = remember(seasonEp, watchedEpisodes) { seasonEp?.let { watchedEpisodes.contains(it) } ?: false }
+            val isStatusLoading = remember(seasonEp, isEpisodeWatchedStatusLoading) {
+                seasonEp != null && isEpisodeWatchedStatusLoading
+            }
+            val isPending = remember(seasonEp, episodeWatchedPendingKeys) {
+                seasonEp?.let { episodeWatchedPendingKeys.contains(episodePendingKey(episode)) } ?: false
+            }
             val episodeFocusRequester = remember(episode.id) { episodeFocusRequesters.getOrPut(episode.id) { FocusRequester() } }
             val episodeOnClick = remember(episode.id) { { onEpisodeClick(episode) } }
             val episodeOnLongPress = remember(episode.id) { { optionsEpisode = episode } }
@@ -319,6 +327,7 @@ fun EpisodesRow(
                 watchProgress = progress,
                 imdbRating = imdbRating,
                 isMarkedWatched = isMarkedWatched,
+                isPending = isPending || isStatusLoading,
                 blurUnwatched = blurUnwatchedEpisodes,
                 cardMetrics = cardMetrics,
                 onClick = episodeOnClick,
@@ -336,11 +345,10 @@ fun EpisodesRow(
     optionsEpisode?.let { selectedEpisode ->
         val selectedWatched = selectedEpisode.season?.let { season ->
             selectedEpisode.episode?.let { episode ->
-                episodeProgressMap[season to episode]?.isCompleted() == true
-                    || watchedEpisodes.contains(season to episode)
+                watchedEpisodes.contains(season to episode)
             }
         } ?: false
-        val isPending = episodeWatchedPendingKeys.contains(episodePendingKey(selectedEpisode))
+        val isPending = isEpisodeWatchedStatusLoading || episodeWatchedPendingKeys.contains(episodePendingKey(selectedEpisode))
         val firstEpisodeInSeason = dedupedEpisodes.minByOrNull { it.episode ?: Int.MAX_VALUE }
         val hasPreviousEpisodes = selectedEpisode.episode != null &&
             firstEpisodeInSeason?.episode != null &&
@@ -389,6 +397,7 @@ private fun EpisodeCard(
     watchProgress: com.nuvio.tv.domain.model.WatchProgress? = null,
     imdbRating: Double? = null,
     isMarkedWatched: Boolean = false,
+    isPending: Boolean = false,
     blurUnwatched: Boolean = false,
     cardMetrics: EpisodeCardMetrics,
     imdbLogoRequest: ImageRequest,
@@ -412,12 +421,14 @@ private fun EpisodeCard(
         imdbRating?.takeIf { it > 0.0 }?.let { String.format(Locale.US, "%.1f", it) }
     }
     val description = remember(episode.overview) { episode.overview?.trim().orEmpty() }
-    val isWatched = remember(watchProgress, isMarkedWatched) { watchProgress?.isCompleted() == true || isMarkedWatched }
+    val isWatched = remember(isMarkedWatched) { isMarkedWatched }
     val shouldBlur = remember(blurUnwatched, isWatched) { blurUnwatched && !isWatched }
     val progressPercent = remember(watchProgress) { watchProgress?.progressPercentage ?: 0f }
     val showProgress = remember(progressPercent) { progressPercent >= 0.02f && progressPercent < 0.85f }
-    val showCompletedBadge = isWatched
-    val showNotStartedBadge = remember(showCompletedBadge, progressPercent) { !showCompletedBadge && progressPercent < 0.02f }
+    val showCompletedBadge = !isPending && isWatched
+    val showNotStartedBadge = remember(showCompletedBadge, isPending, progressPercent) {
+        !showCompletedBadge && !isPending && progressPercent < 0.02f
+    }
     val isUnavailable = remember(episode.available) { episode.available == false }
     val cardBgColor = NuvioColors.BackgroundCard
     val isFocusedState = remember { mutableStateOf(false) }
@@ -478,6 +489,7 @@ private fun EpisodeCard(
     val badgeShape = remember(cardMetrics.episodeBadgeCornerRadius) { RoundedCornerShape(cardMetrics.episodeBadgeCornerRadius) }
     val progressBgColor = remember { Color.Black.copy(alpha = 0.45f) }
     val notStartedBadgeColor = remember(textSecondary) { textSecondary.copy(alpha = 0.9f) }
+    val watchedBadgeColor = remember { Color(0xFF22C55E) }
     val thumbnailRequest = remember(context, episode.thumbnail, thumbnailWidthPx, thumbnailHeightPx, shouldBlur) {
         ImageRequest.Builder(context)
             .data(episode.thumbnail)
@@ -741,7 +753,7 @@ private fun EpisodeCard(
                 )
             }
 
-            if (showCompletedBadge) {
+            if (isPending) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -750,7 +762,26 @@ private fun EpisodeCard(
                             top = cardMetrics.statusBadgeInset
                         )
                         .size(cardMetrics.statusBadgeSize)
-                        .background(primaryColor, CircleShape),
+                        .background(Color(0xCC111111), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    MaterialCircularProgressIndicator(
+                        modifier = Modifier.size(cardMetrics.statusIconSize + 4.dp),
+                        strokeWidth = 2.dp,
+                        color = primaryColor,
+                        trackColor = Color.Transparent
+                    )
+                }
+            } else if (showCompletedBadge) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(
+                            start = cardMetrics.statusBadgeInset,
+                            top = cardMetrics.statusBadgeInset
+                        )
+                        .size(cardMetrics.statusBadgeSize)
+                        .background(watchedBadgeColor, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -849,7 +880,20 @@ private fun EpisodeOptionsDialog(
                 contentColor = NuvioColors.TextPrimary
             )
         ) {
-            Text(if (isWatched) stringResource(R.string.episodes_mark_unwatched) else stringResource(R.string.episodes_mark_watched))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isPending) {
+                    MaterialCircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = NuvioColors.TextPrimary,
+                        trackColor = Color.Transparent
+                    )
+                }
+                Text(if (isWatched) stringResource(R.string.episodes_mark_unwatched) else stringResource(R.string.episodes_mark_watched))
+            }
         }
 
         Button(
