@@ -20,10 +20,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.requiredWidth
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -46,9 +42,7 @@ fun GridContinueWatchingSection(
     showManualPlayOption: Boolean = false,
     onPlayManually: (ContinueWatchingItem) -> Unit = {},
     modifier: Modifier = Modifier,
-    fullWidth: Dp = Dp.Unspecified,
-    focusedItemIndex: Int = -1,
-    blurUnwatchedEpisodes: Boolean = false
+    focusedItemIndex: Int = -1
 ) {
     if (items.isEmpty()) return
     var optionsItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
@@ -78,7 +72,7 @@ fun GridContinueWatchingSection(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 24.dp, bottom = 12.dp)
+                .padding(top = 24.dp, bottom = 12.dp, start = 24.dp, end = 24.dp)
         ) {
             Column {
                 Text(
@@ -91,18 +85,13 @@ fun GridContinueWatchingSection(
 
         LazyRow(
             modifier = Modifier
-                .then(
-                    if (fullWidth != Dp.Unspecified)
-                        Modifier.requiredWidth(fullWidth)
-                    else
-                        Modifier.fillMaxWidth()
-                )
+                .fillMaxWidth()
                 .focusRestorer {
                     val idx = if (lastFocusedIndex >= 0 && lastFocusedIndex < focusRequesters.size)
                         lastFocusedIndex else 0
                     focusRequesters.getOrNull(idx) ?: FocusRequester.Default
                 },
-            contentPadding = PaddingValues(horizontal = 36.dp, vertical = 0.dp),
+            contentPadding = PaddingValues(horizontal = 24.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             itemsIndexed(
@@ -126,7 +115,6 @@ fun GridContinueWatchingSection(
                     item = progress,
                     onClick = { onItemClick(progress) },
                     onLongPress = { optionsItem = progress },
-                    blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                     modifier = focusModifier
                         .onFocusChanged { focusState ->
                             if (focusState.isFocused && lastFocusedIndex != index) {

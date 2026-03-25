@@ -165,6 +165,7 @@ fun AddonManagerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(NuvioColors.Background)
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),

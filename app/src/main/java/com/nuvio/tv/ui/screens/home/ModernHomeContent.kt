@@ -8,7 +8,6 @@ package com.nuvio.tv.ui.screens.home
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -67,8 +66,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.metrics.performance.PerformanceMetricsState
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -134,10 +131,7 @@ fun ModernHomeContent(
 ) {
     val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
     val isSidebarExpanded = LocalSidebarExpanded.current
-    val lifecycleOwner = LocalLifecycleOwner.current
     val useLandscapePosters = uiState.modernLandscapePostersEnabled
-    val fullScreenBackdrop = uiState.modernHeroFullScreenBackdropEnabled
-    val showFullReleaseDate = uiState.showFullReleaseDate
     val showCatalogTypeSuffixInModern = uiState.catalogTypeSuffixEnabled
     val isLandscapeModern = useLandscapePosters
     val expandControlAvailable = !isLandscapeModern
@@ -256,8 +250,7 @@ fun ModernHomeContent(
                             val cachedItem = rowItemCache[cacheKey]
                             if (cachedItem != null &&
                                 cachedItem.source == item &&
-                                cachedItem.useLandscapePosters == useLandscapePosters &&
-                                cachedItem.showFullReleaseDate == showFullReleaseDate
+                                cachedItem.useLandscapePosters == useLandscapePosters
                             ) {
                                 cachedItem.carouselItem
                             } else {
@@ -267,13 +260,11 @@ fun ModernHomeContent(
                                     useLandscapePosters = useLandscapePosters,
                                     occurrence = occurrence,
                                     strTypeMovie = strTypeMovie,
-                                    strTypeSeries = strTypeSeries,
-                                    showFullReleaseDate = showFullReleaseDate
+                                    strTypeSeries = strTypeSeries
                                 )
                                 rowItemCache[cacheKey] = CachedCarouselItem(
                                     source = item,
                                     useLandscapePosters = useLandscapePosters,
-                                    showFullReleaseDate = showFullReleaseDate,
                                     carouselItem = built
                                 )
                                 built
@@ -392,7 +383,6 @@ fun ModernHomeContent(
         if (isVerticalRowsScrolling) return@LaunchedEffect
         val selection = focusedCatalogSelection ?: return@LaunchedEffect
         delay(uiState.focusedPosterBackdropExpandDelaySeconds.coerceAtLeast(0) * 1000L)
-        if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@LaunchedEffect
         if (shouldActivateFocusedPosterFlow &&
             !isVerticalRowsScrolling &&
             focusedCatalogSelection?.focusKey == selection.focusKey
@@ -596,12 +586,17 @@ fun ModernHomeContent(
 
     val portraitBaseWidth = uiState.posterCardWidthDp.dp
     val portraitBaseHeight = uiState.posterCardHeightDp.dp
-    val portraitModernPosterScale = 1.08f
-    val landscapeModernPosterScale = 1.34f
-    val portraitCatalogCardWidth = portraitBaseWidth * 0.84f * portraitModernPosterScale
-    val portraitCatalogCardHeight = portraitBaseHeight * 0.84f * portraitModernPosterScale
-    val landscapeCatalogCardWidth = portraitBaseWidth * 1.24f * landscapeModernPosterScale
-    val landscapeCatalogCardHeight = landscapeCatalogCardWidth / 1.77f
+    val modernPosterScale = if (useLandscapePosters) 1.34f else 1.08f
+    val modernCatalogCardWidth = if (useLandscapePosters) {
+        portraitBaseWidth * 1.24f * modernPosterScale
+    } else {
+        portraitBaseWidth * 0.84f * modernPosterScale
+    }
+    val modernCatalogCardHeight = if (useLandscapePosters) {
+        modernCatalogCardWidth / 1.77f
+    } else {
+        portraitBaseHeight * 0.84f * modernPosterScale
+    }
     val continueWatchingScale = 1.34f
     val continueWatchingCardWidth = portraitBaseWidth * 1.24f * continueWatchingScale
     val continueWatchingCardHeight = continueWatchingCardWidth / 1.77f
@@ -711,32 +706,19 @@ fun ModernHomeContent(
                 } else FocusRequester.Default
             }
         }
-        val heroMediaWidthPx = remember(maxWidth, localDensity, fullScreenBackdrop) {
-            with(localDensity) {
-                if (fullScreenBackdrop) maxWidth.roundToPx()
-                else (maxWidth * MODERN_HERO_MEDIA_WIDTH_FRACTION).roundToPx()
-            }
+        val heroMediaWidthPx = remember(maxWidth, localDensity) {
+            with(localDensity) { (maxWidth * MODERN_HERO_MEDIA_WIDTH_FRACTION).roundToPx() }
         }
-        val heroMediaHeightPx = remember(heroBackdropHeight, maxHeight, localDensity, fullScreenBackdrop) {
-            with(localDensity) {
-                if (fullScreenBackdrop) maxHeight.roundToPx()
-                else heroBackdropHeight.roundToPx()
-            }
+        val heroMediaHeightPx = remember(heroBackdropHeight, localDensity) {
+            with(localDensity) { heroBackdropHeight.roundToPx() }
         }
 
-        val heroMediaModifier = remember(heroBackdropHeight, maxHeight, fullScreenBackdrop) {
-            if (fullScreenBackdrop) {
-                Modifier
-                    .align(Alignment.TopStart)
-                    .fillMaxWidth()
-                    .height(maxHeight)
-            } else {
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = 56.dp)
-                    .fillMaxWidth(MODERN_HERO_MEDIA_WIDTH_FRACTION)
-                    .height(heroBackdropHeight)
-            }
+        val heroMediaModifier = remember(heroBackdropHeight) {
+            Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 56.dp)
+                .fillMaxWidth(MODERN_HERO_MEDIA_WIDTH_FRACTION)
+                .height(heroBackdropHeight)
         }
 
         ModernHeroMediaLayer(
@@ -755,20 +737,12 @@ fun ModernHomeContent(
         )
         ModernHeroGradientLayer(
             bgColor = bgColor,
-            isFullScreen = fullScreenBackdrop,
             modifier = heroMediaModifier
         )
-        val trailerContentAlpha by animateFloatAsState(
-            targetValue = if (shouldPlayHeroTrailer && heroTrailerFirstFrameRendered) 0.12f else 1f,
-            animationSpec = tween(durationMillis = 480),
-            label = "trailerContentFade"
-        )
-
         HeroTitleBlock(
             preview = if (enrichmentActive) null else resolvedHero,
             enrichmentActive = enrichmentActive,
             portraitMode = !useLandscapePosters,
-            trailerPlaying = shouldPlayHeroTrailer && heroTrailerFirstFrameRendered,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(
@@ -787,7 +761,6 @@ fun ModernHomeContent(
                     .fillMaxWidth()
                     .height(rowsViewportHeight)
                     .padding(bottom = catalogBottomPadding)
-                    .graphicsLayer { alpha = trailerContentAlpha }
                     .focusRequester(contentFocusRequester)
                     .focusRestorer { focusRestorerRequester }
                     .onPreviewKeyEvent { event ->
@@ -872,13 +845,10 @@ fun ModernHomeContent(
                         expandedCatalogFocusKey = expandedCatalogFocusKey,
                         expandedTrailerPreviewUrl = expandedCatalogTrailerUrl,
                         expandedTrailerPreviewAudioUrl = expandedCatalogTrailerAudioUrl,
-                        portraitCatalogCardWidth = portraitCatalogCardWidth,
-                        portraitCatalogCardHeight = portraitCatalogCardHeight,
-                        landscapeCatalogCardWidth = landscapeCatalogCardWidth,
-                        landscapeCatalogCardHeight = landscapeCatalogCardHeight,
+                        modernCatalogCardWidth = modernCatalogCardWidth,
+                        modernCatalogCardHeight = modernCatalogCardHeight,
                         continueWatchingCardWidth = continueWatchingCardWidth,
                         continueWatchingCardHeight = continueWatchingCardHeight,
-                        blurUnwatchedEpisodes = uiState.blurUnwatchedEpisodes,
                         onContinueWatchingClick = onContinueWatchingClick,
                         onContinueWatchingOptions = stableOnContinueWatchingOptions,
                         isCatalogItemWatched = isCatalogItemWatched,

@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.sync.ProfileSyncService
-import com.nuvio.tv.data.remote.supabase.SupabaseProfilePinVerifyResult
 import com.nuvio.tv.data.remote.supabase.AvatarCatalogItem
 import com.nuvio.tv.data.remote.supabase.AvatarRepository
 import com.nuvio.tv.domain.model.UserProfile
@@ -39,15 +38,8 @@ class ProfileSelectionViewModel @Inject constructor(
     private val _isSaving = MutableStateFlow(false)
     val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
 
-    private val _profilePinEnabled = MutableStateFlow<Map<Int, Boolean>>(emptyMap())
-    val profilePinEnabled: StateFlow<Map<Int, Boolean>> = _profilePinEnabled.asStateFlow()
-
-    private val _isPinOperationInProgress = MutableStateFlow(false)
-    val isPinOperationInProgress: StateFlow<Boolean> = _isPinOperationInProgress.asStateFlow()
-
     init {
         loadAvatarCatalog()
-        refreshProfilePinStates()
     }
 
     fun loadAvatarCatalog() {
@@ -91,7 +83,6 @@ class ProfileSelectionViewModel @Inject constructor(
             )
             if (success) {
                 profileSyncService.pushToRemote()
-                refreshProfilePinStates()
             }
             _isCreating.value = false
         }
@@ -103,7 +94,6 @@ class ProfileSelectionViewModel @Inject constructor(
             _isSaving.value = true
             profileManager.updateProfile(profile)
             profileSyncService.pushToRemote()
-            refreshProfilePinStates()
             _isSaving.value = false
         }
     }
@@ -113,59 +103,6 @@ class ProfileSelectionViewModel @Inject constructor(
             profileManager.deleteProfile(id)
             profileSyncService.deleteProfileData(id)
             profileSyncService.pushToRemote()
-            refreshProfilePinStates()
-        }
-    }
-
-    fun refreshProfilePinStates() {
-        viewModelScope.launch {
-            profileSyncService.pullProfileLockStates()
-                .onSuccess { states ->
-                    _profilePinEnabled.value = states
-                }
-                .onFailure { e ->
-                    Log.e("ProfileSelectionVM", "Failed to refresh profile PIN states", e)
-                }
-        }
-    }
-
-    fun isProfilePinEnabled(profileId: Int): Boolean {
-        return _profilePinEnabled.value[profileId] == true
-    }
-
-    fun setProfilePin(profileId: Int, pin: String, currentPin: String? = null, onComplete: (Boolean) -> Unit) {
-        if (_isPinOperationInProgress.value) return
-        viewModelScope.launch {
-            _isPinOperationInProgress.value = true
-            val success = profileSyncService.setProfilePin(profileId, pin, currentPin).isSuccess
-            if (success) {
-                _profilePinEnabled.value = _profilePinEnabled.value + (profileId to true)
-            }
-            _isPinOperationInProgress.value = false
-            onComplete(success)
-        }
-    }
-
-    fun clearProfilePin(profileId: Int, currentPin: String? = null, onComplete: (Boolean) -> Unit) {
-        if (_isPinOperationInProgress.value) return
-        viewModelScope.launch {
-            _isPinOperationInProgress.value = true
-            val success = profileSyncService.clearProfilePin(profileId, currentPin).isSuccess
-            if (success) {
-                _profilePinEnabled.value = _profilePinEnabled.value + (profileId to false)
-            }
-            _isPinOperationInProgress.value = false
-            onComplete(success)
-        }
-    }
-
-    fun verifyProfilePin(profileId: Int, pin: String, onComplete: (Result<SupabaseProfilePinVerifyResult>) -> Unit) {
-        if (_isPinOperationInProgress.value) return
-        viewModelScope.launch {
-            _isPinOperationInProgress.value = true
-            val result = profileSyncService.verifyProfilePin(profileId, pin)
-            _isPinOperationInProgress.value = false
-            onComplete(result)
         }
     }
 }

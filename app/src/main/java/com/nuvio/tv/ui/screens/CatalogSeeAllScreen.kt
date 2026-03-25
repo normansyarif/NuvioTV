@@ -142,11 +142,12 @@ fun CatalogSeeAllScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(vertical = 24.dp)
+            .background(NuvioColors.Background)
+            .padding(horizontal = 48.dp, vertical = 24.dp)
     ) {
         // Header
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 48.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -159,7 +160,6 @@ fun CatalogSeeAllScreen(
         if (uiState.catalogAddonNameEnabled) {
             catalogRow?.addonName?.let { addonName ->
                 Text(
-                    modifier = Modifier.padding(horizontal = 48.dp),
                     text = stringResource(R.string.catalog_see_all_from, addonName),
                     style = MaterialTheme.typography.bodyMedium,
                     color = NuvioColors.TextSecondary
@@ -178,8 +178,6 @@ fun CatalogSeeAllScreen(
                     state = gridState,
                     columns = GridCells.Adaptive(minSize = posterCardStyle.width),
                     contentPadding = PaddingValues(
-                        start = 48.dp,
-                        end = 24.dp,
                         top = 12.dp,
                         bottom = if (catalogRow.isLoading) 80.dp else 32.dp
                     ),

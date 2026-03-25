@@ -260,6 +260,7 @@ fun SettingsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(NuvioColors.Background)
             .padding(
                 start = 32.dp,
                 end = 32.dp,

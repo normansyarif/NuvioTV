@@ -8,8 +8,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.nuvio.tv.domain.model.CatalogRow
-import com.nuvio.tv.domain.model.ContentType
-import com.nuvio.tv.domain.model.PosterShape
 import com.nuvio.tv.ui.util.localizeEpisodeTitle
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.R
@@ -140,54 +138,8 @@ internal class ModernCarouselRowBuildCache {
 internal data class CachedCarouselItem(
     val source: MetaPreview,
     val useLandscapePosters: Boolean,
-    val showFullReleaseDate: Boolean,
     val carouselItem: ModernCarouselItem
 )
-
-@Immutable
-internal data class ModernCatalogCardMetrics(
-    val width: androidx.compose.ui.unit.Dp,
-    val height: androidx.compose.ui.unit.Dp
-)
-
-internal fun ModernCarouselItem.catalogCardMetrics(
-    useLandscapePosters: Boolean,
-    portraitCardWidth: androidx.compose.ui.unit.Dp,
-    portraitCardHeight: androidx.compose.ui.unit.Dp,
-    landscapeCardWidth: androidx.compose.ui.unit.Dp,
-    landscapeCardHeight: androidx.compose.ui.unit.Dp
-): ModernCatalogCardMetrics {
-    if (payload !is ModernPayload.Catalog) {
-        return ModernCatalogCardMetrics(
-            width = if (useLandscapePosters) landscapeCardWidth else portraitCardWidth,
-            height = if (useLandscapePosters) landscapeCardHeight else portraitCardHeight
-        )
-    }
-
-    if (useLandscapePosters) {
-        return ModernCatalogCardMetrics(
-            width = landscapeCardWidth,
-            height = landscapeCardHeight
-        )
-    }
-
-    return when (metaPreview?.posterShape ?: PosterShape.POSTER) {
-        PosterShape.LANDSCAPE -> ModernCatalogCardMetrics(
-            width = landscapeCardWidth,
-            height = landscapeCardHeight
-        )
-
-        PosterShape.SQUARE -> ModernCatalogCardMetrics(
-            width = portraitCardHeight,
-            height = portraitCardHeight
-        )
-
-        PosterShape.POSTER -> ModernCatalogCardMetrics(
-            width = portraitCardWidth,
-            height = portraitCardHeight
-        )
-    }
-}
 
 
 internal fun buildContinueWatchingItem(
@@ -209,13 +161,7 @@ internal fun buildContinueWatchingItem(
             )
         }
         is ContinueWatchingItem.NextUp -> {
-            if (item.info.isReleaseAlert) {
-                if (item.info.isNewSeasonRelease) {
-                    context.getString(R.string.cw_new_season)
-                } else {
-                    context.getString(R.string.cw_new_episode)
-                }
-            } else if (!item.info.hasAired) {
+            if (!item.info.hasAired) {
                 item.info.airDateLabel?.let { context.getString(R.string.cw_airs_date, it) }
                     ?: context.getString(R.string.cw_upcoming)
             } else {
@@ -335,8 +281,7 @@ internal fun buildCatalogItem(
     useLandscapePosters: Boolean,
     occurrence: Int,
     strTypeMovie: String = "",
-    strTypeSeries: String = "",
-    showFullReleaseDate: Boolean = true
+    strTypeSeries: String = ""
 ): ModernCarouselItem {
     val heroPreview = HeroPreview(
         title = item.name,
@@ -348,7 +293,7 @@ internal fun buildCatalogItem(
             else -> item.apiType.replaceFirstChar { ch -> ch.uppercase() }
         },
         isSeries = isSeriesType(item.apiType),
-        yearText = extractYearText(item.type, item.releaseInfo, item.released, showFullReleaseDate),
+        yearText = extractYear(item.releaseInfo),
         runtimeText = formatHeroRuntime(item.runtime),
         imdbText = item.imdbRating?.let { String.format("%.1f", it) },
         ageRatingText = item.ageRating,
@@ -434,22 +379,6 @@ internal fun extractYear(releaseInfo: String?): String? {
     return YEAR_REGEX.find(releaseInfo)?.value
 }
 
-internal fun extractYearText(type: ContentType, releaseInfo: String?, released: String?, showFullDate: Boolean = true): String? {
-    if (showFullDate && type == ContentType.MOVIE) {
-        val full = released
-            ?.let { runCatching { java.time.OffsetDateTime.parse(it).toLocalDate() }.getOrNull() }
-            ?.let {
-                val locale = java.util.Locale.getDefault()
-                val pattern = android.text.format.DateFormat.getBestDateTimePattern(locale, "dMMMMy")
-                java.text.SimpleDateFormat(pattern, locale).format(
-                    java.util.Date(it.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli())
-                )
-            }
-        if (full != null) return full
-    }
-    return extractYear(releaseInfo)
-}
-
 private fun formatHeroRuntime(runtime: String?): String? {
     val normalized = runtime?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: return null
     val hours = "(\\d+)\\s*h".toRegex().find(normalized)?.groupValues?.getOrNull(1)?.toIntOrNull()
@@ -485,13 +414,13 @@ internal fun ContinueWatchingItem.contentType(): String {
 internal fun ContinueWatchingItem.season(): Int? {
     return when (this) {
         is ContinueWatchingItem.InProgress -> progress.season
-        is ContinueWatchingItem.NextUp -> info.seedSeason
+        is ContinueWatchingItem.NextUp -> info.season
     }
 }
 
 internal fun ContinueWatchingItem.episode(): Int? {
     return when (this) {
         is ContinueWatchingItem.InProgress -> progress.episode
-        is ContinueWatchingItem.NextUp -> info.seedEpisode
+        is ContinueWatchingItem.NextUp -> info.episode
     }
 }

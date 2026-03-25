@@ -7,9 +7,6 @@ import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
@@ -93,8 +90,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 private const val MODERN_HORIZONTAL_FOCUS_DEBOUNCE_MS = 140L
 private const val POSTER_PREFETCH_DISTANCE = 8
 
-internal val LocalVerticalRowsScrolling = androidx.compose.runtime.compositionLocalOf { false }
-
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun ModernContinueWatchingRowItem(
@@ -102,7 +97,6 @@ private fun ModernContinueWatchingRowItem(
     requester: FocusRequester,
     cardWidth: Dp,
     imageHeight: Dp,
-    blurUnwatchedEpisodes: Boolean,
     onFocused: () -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onShowOptions: (ContinueWatchingItem) -> Unit,
@@ -129,7 +123,6 @@ private fun ModernContinueWatchingRowItem(
         onLongPress = onLongPress,
         cardWidth = cardWidth,
         imageHeight = imageHeight,
-        blurUnwatchedEpisodes = blurUnwatchedEpisodes,
         modifier = modifier
             .focusRequester(requester)
             .onFocusChanged {
@@ -150,10 +143,8 @@ private fun ModernCatalogRowItem(
     useLandscapePosters: Boolean,
     showLabels: Boolean,
     posterCardCornerRadius: Dp,
-    portraitCatalogCardWidth: Dp,
-    portraitCatalogCardHeight: Dp,
-    landscapeCatalogCardWidth: Dp,
-    landscapeCatalogCardHeight: Dp,
+    modernCatalogCardWidth: Dp,
+    modernCatalogCardHeight: Dp,
     focusedPosterBackdropTrailerMuted: Boolean,
     effectiveExpandEnabled: Boolean,
     effectiveAutoplayEnabled: Boolean,
@@ -217,30 +208,14 @@ private fun ModernCatalogRowItem(
     } else {
         null
     }
-    val cardMetrics = remember(
-        item,
-        useLandscapePosters,
-        portraitCatalogCardWidth,
-        portraitCatalogCardHeight,
-        landscapeCatalogCardWidth,
-        landscapeCatalogCardHeight
-    ) {
-        item.catalogCardMetrics(
-            useLandscapePosters = useLandscapePosters,
-            portraitCardWidth = portraitCatalogCardWidth,
-            portraitCardHeight = portraitCatalogCardHeight,
-            landscapeCardWidth = landscapeCatalogCardWidth,
-            landscapeCardHeight = landscapeCatalogCardHeight
-        )
-    }
 
     ModernCarouselCard(
         item = item,
-        useLandscapeOverlayTreatment = useLandscapePosters,
+        useLandscapePosters = useLandscapePosters,
         showLabels = showLabels,
         cardCornerRadius = posterCardCornerRadius,
-        cardWidth = cardMetrics.width,
-        cardHeight = cardMetrics.height,
+        cardWidth = modernCatalogCardWidth,
+        cardHeight = modernCatalogCardHeight,
         modifier = modifier,
         focusedPosterBackdropExpandEnabled = effectiveExpandEnabled,
         isBackdropExpanded = effectiveBackdropExpanded,
@@ -292,13 +267,10 @@ internal fun ModernRowSection(
     expandedCatalogFocusKey: String?,
     expandedTrailerPreviewUrl: String?,
     expandedTrailerPreviewAudioUrl: String?,
-    portraitCatalogCardWidth: Dp,
-    portraitCatalogCardHeight: Dp,
-    landscapeCatalogCardWidth: Dp,
-    landscapeCatalogCardHeight: Dp,
+    modernCatalogCardWidth: Dp,
+    modernCatalogCardHeight: Dp,
     continueWatchingCardWidth: Dp,
     continueWatchingCardHeight: Dp,
-    blurUnwatchedEpisodes: Boolean,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingOptions: (ContinueWatchingItem) -> Unit,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
@@ -435,34 +407,15 @@ internal fun ModernRowSection(
         val imageLoader = context.imageLoader
 
         val rowItemCount = row.items.size
-        LaunchedEffect(
-            row.key,
-            rowItemCount,
-            portraitCatalogCardWidth,
-            portraitCatalogCardHeight,
-            landscapeCatalogCardWidth,
-            landscapeCatalogCardHeight,
-            continueWatchingCardWidth,
-            continueWatchingCardHeight
-        ) {
-            delay(150) // Wait before spamming image requests to survive rapid vertical D-pad scrolls!
+        LaunchedEffect(row.key, rowItemCount, modernCatalogCardWidth, modernCatalogCardHeight, continueWatchingCardWidth, continueWatchingCardHeight) {
+            val catalogWidthPx = with(density) { modernCatalogCardWidth.roundToPx() }
+            val catalogHeightPx = with(density) { modernCatalogCardHeight.roundToPx() }
             val cwWidthPx = with(density) { continueWatchingCardWidth.roundToPx() }
             val cwHeightPx = with(density) { continueWatchingCardHeight.roundToPx() }
             fun imageUrlAndKey(item: ModernCarouselItem): Pair<String, String>? {
                 val url = item.imageUrl ?: return null
                 return when (item.payload) {
-                    is ModernPayload.Catalog -> {
-                        val metrics = item.catalogCardMetrics(
-                            useLandscapePosters = useLandscapePosters,
-                            portraitCardWidth = portraitCatalogCardWidth,
-                            portraitCardHeight = portraitCatalogCardHeight,
-                            landscapeCardWidth = landscapeCatalogCardWidth,
-                            landscapeCardHeight = landscapeCatalogCardHeight
-                        )
-                        val widthPx = with(density) { metrics.width.roundToPx() }
-                        val heightPx = with(density) { metrics.height.roundToPx() }
-                        url to "${url}_${widthPx}x${heightPx}"
-                    }
+                    is ModernPayload.Catalog -> url to "${url}_${catalogWidthPx}x${catalogHeightPx}"
                     is ModernPayload.ContinueWatching -> url to "${url}_${cwWidthPx}x${cwHeightPx}"
                 }
             }
@@ -482,16 +435,7 @@ internal fun ModernRowSection(
             for (i in 0 until minOf(POSTER_PREFETCH_DISTANCE, items.size)) {
                 val item = items.getOrNull(i) ?: continue
                 val (wPx, hPx) = when (item.payload) {
-                    is ModernPayload.Catalog -> {
-                        val metrics = item.catalogCardMetrics(
-                            useLandscapePosters = useLandscapePosters,
-                            portraitCardWidth = portraitCatalogCardWidth,
-                            portraitCardHeight = portraitCatalogCardHeight,
-                            landscapeCardWidth = landscapeCatalogCardWidth,
-                            landscapeCardHeight = landscapeCatalogCardHeight
-                        )
-                        with(density) { metrics.width.roundToPx() } to with(density) { metrics.height.roundToPx() }
-                    }
+                    is ModernPayload.Catalog -> catalogWidthPx to catalogHeightPx
                     is ModernPayload.ContinueWatching -> cwWidthPx to cwHeightPx
                 }
                 enqueueIfNeeded(item, wPx, hPx)
@@ -505,16 +449,7 @@ internal fun ModernRowSection(
                     for (i in (lastVisibleIndex + 1)..(lastVisibleIndex + POSTER_PREFETCH_DISTANCE)) {
                         val item = currentItems.getOrNull(i) ?: continue
                         val (wPx, hPx) = when (item.payload) {
-                            is ModernPayload.Catalog -> {
-                                val metrics = item.catalogCardMetrics(
-                                    useLandscapePosters = useLandscapePosters,
-                                    portraitCardWidth = portraitCatalogCardWidth,
-                                    portraitCardHeight = portraitCatalogCardHeight,
-                                    landscapeCardWidth = landscapeCatalogCardWidth,
-                                    landscapeCardHeight = landscapeCatalogCardHeight
-                                )
-                                with(density) { metrics.width.roundToPx() } to with(density) { metrics.height.roundToPx() }
-                            }
+                            is ModernPayload.Catalog -> catalogWidthPx to catalogHeightPx
                             is ModernPayload.ContinueWatching -> cwWidthPx to cwHeightPx
                         }
                         enqueueIfNeeded(item, wPx, hPx)
@@ -581,7 +516,6 @@ internal fun ModernRowSection(
                                 requester = requester,
                                 cardWidth = continueWatchingCardWidth,
                                 imageHeight = continueWatchingCardHeight,
-                                blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                                 onFocused = onFocused,
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onShowOptions = onContinueWatchingOptions
@@ -591,7 +525,7 @@ internal fun ModernRowSection(
                         is ModernPayload.Catalog -> {
                             val nextCatalogItem = row.items.getOrNull(index + 1)?.metaPreview
                             val metaPreview = item.metaPreview ?: return@itemsIndexed
-                            val isWatched = isCatalogItemWatched(metaPreview)
+                            val isWatched = remember(metaPreview) { isCatalogItemWatched(metaPreview) }
                             val onLongPress: () -> Unit = remember(metaPreview, payload.addonBaseUrl) {
                                 {
                                     onCatalogItemLongPress(metaPreview, payload.addonBaseUrl)
@@ -605,10 +539,8 @@ internal fun ModernRowSection(
                                 useLandscapePosters = useLandscapePosters,
                                 showLabels = showLabels,
                                 posterCardCornerRadius = posterCardCornerRadius,
-                                portraitCatalogCardWidth = portraitCatalogCardWidth,
-                                portraitCatalogCardHeight = portraitCatalogCardHeight,
-                                landscapeCatalogCardWidth = landscapeCatalogCardWidth,
-                                landscapeCatalogCardHeight = landscapeCatalogCardHeight,
+                                modernCatalogCardWidth = modernCatalogCardWidth,
+                                modernCatalogCardHeight = modernCatalogCardHeight,
                                 focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
                                 effectiveExpandEnabled = effectiveExpandEnabled,
                                 effectiveAutoplayEnabled = effectiveAutoplayEnabled,
@@ -642,7 +574,7 @@ internal fun ModernRowSection(
 @Composable
 private fun ModernCarouselCard(
     item: ModernCarouselItem,
-    useLandscapeOverlayTreatment: Boolean,
+    useLandscapePosters: Boolean,
     showLabels: Boolean,
     cardCornerRadius: Dp,
     cardWidth: Dp,
@@ -681,23 +613,8 @@ private fun ModernCarouselCard(
         rememberUpdatedState(cardWidth)
     }
     val animatedCardWidth by animatedCardWidthState
-    // Freeze the logo URL for row cards - enrichment updates must not cause flickering.
-    // The first non-blank value wins and is never replaced.
-    val frozenLogoUrl = remember(item.key) { mutableStateOf(item.heroPreview.logo) }
-    if (frozenLogoUrl.value.isNullOrBlank() && !item.heroPreview.logo.isNullOrBlank()) {
-        frozenLogoUrl.value = item.heroPreview.logo
-    }
-    val effectiveLogoUrl = frozenLogoUrl.value
-    // Freeze the backdrop URL for landscape cards - prevents image reload when enrichment updates backdrop.
-    val frozenBackdropUrl = remember(item.key) { mutableStateOf(item.heroPreview.backdrop) }
-    if (frozenBackdropUrl.value.isNullOrBlank() && !item.heroPreview.backdrop.isNullOrBlank()) {
-        frozenBackdropUrl.value = item.heroPreview.backdrop
-    }
-    val effectiveBackdropUrl = frozenBackdropUrl.value
     val imageUrl = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
         item.heroPreview.backdrop ?: item.imageUrl ?: item.heroPreview.poster
-    } else if (useLandscapeOverlayTreatment) {
-        effectiveBackdropUrl ?: item.heroPreview.poster
     } else {
         item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop
     }
@@ -731,9 +648,8 @@ private fun ModernCarouselCard(
     val maxLogoWidthPx = remember(maxRequestCardWidth, density) {
         with(density) { (maxRequestCardWidth * 0.62f).roundToPx() }
     }
-
-    val logoModel = remember(context, effectiveLogoUrl, maxLogoWidthPx, logoHeightPx) {
-        effectiveLogoUrl?.let {
+    val logoModel = remember(context, item.heroPreview.logo, maxLogoWidthPx, logoHeightPx) {
+        item.heroPreview.logo?.let {
             ImageRequest.Builder(context)
                 .data(it)
                 .crossfade(true)
@@ -742,26 +658,18 @@ private fun ModernCarouselCard(
                 .build()
         }
     }
-    var landscapeLogoLoadFailed by remember(effectiveLogoUrl) { mutableStateOf(false) }
+    var landscapeLogoLoadFailed by remember(item.heroPreview.logo) { mutableStateOf(false) }
     val shouldPlayTrailerInCard = playTrailerInExpandedCard && !trailerPreviewUrl.isNullOrBlank()
-    val isVerticalRowsScrolling = LocalVerticalRowsScrolling.current
-    val imageCacheKey = "${imageUrl}_${requestWidthPx}x${requestHeightPx}"
-    val isImageCached = remember(imageModel) {
-        context.imageLoader.memoryCache?.get(MemoryCache.Key(imageCacheKey)) != null
-    }
-
-    val safeImageModel = if (isVerticalRowsScrolling && !isImageCached) null else imageModel
-    val hasImage = !imageUrl.isNullOrBlank() && safeImageModel != null
+    val hasImage = !imageUrl.isNullOrBlank()
     val hasLandscapeLogo =
-        (useLandscapeOverlayTreatment || isBackdropExpanded) &&
-            !effectiveLogoUrl.isNullOrBlank() &&
+        (useLandscapePosters || isBackdropExpanded) &&
+            !item.heroPreview.logo.isNullOrBlank() &&
             !landscapeLogoLoadFailed
     var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }
     val backgroundCardColor = NuvioColors.BackgroundCard
     val focusRingColor = NuvioColors.FocusRing
     val titleMedium = MaterialTheme.typography.titleMedium
-    val backgroundPainter = remember(backgroundCardColor) { androidx.compose.ui.graphics.painter.ColorPainter(backgroundCardColor) }
     val focusedBorder = remember(cardShape, focusRingColor) {
         Border(
             border = BorderStroke(2.dp, focusRingColor),
@@ -772,13 +680,18 @@ private fun ModernCarouselCard(
         titleMedium.copy(fontWeight = FontWeight.Medium)
     }
 
-    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-
     Column(
         modifier = modifier.width(animatedCardWidth),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Box(
+        Card(
+            onClick = {
+                if (longPressTriggered) {
+                    longPressTriggered = false
+                } else {
+                    onClick()
+                }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(cardHeight)
@@ -816,20 +729,16 @@ private fun ModernCarouselCard(
                         return@onPreviewKeyEvent true
                     }
                     false
-                }
-                .clip(cardShape)
-                .border(if (isFocused) focusedBorder.border else BorderStroke(0.dp, Color.Transparent), cardShape)
-                .clickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    onClick = {
-                        if (longPressTriggered) {
-                            longPressTriggered = false
-                        } else {
-                            onClick()
-                        }
-                    }
-                )
+                },
+            shape = CardDefaults.shape(shape = cardShape),
+            colors = CardDefaults.colors(
+                containerColor = backgroundCardColor,
+                focusedContainerColor = backgroundCardColor
+            ),
+            border = CardDefaults.border(
+                focusedBorder = focusedBorder
+            ),
+            scale = CardDefaults.scale(focusedScale = 1f)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 val mediaLayerModifier = remember(hasLandscapeLogo) {
@@ -850,12 +759,9 @@ private fun ModernCarouselCard(
                 Box(modifier = mediaLayerModifier) {
                     if (hasImage) {
                         AsyncImage(
-                            model = safeImageModel,
+                            model = imageModel,
                             contentDescription = item.title,
                             modifier = Modifier.fillMaxSize(),
-                            placeholder = backgroundPainter,
-                            error = backgroundPainter,
-                            fallback = backgroundPainter,
                             contentScale = ContentScale.Crop
                         )
                     } else {
@@ -889,7 +795,7 @@ private fun ModernCarouselCard(
                         contentScale = ContentScale.Fit,
                         alignment = Alignment.CenterStart
                     )
-                } else if (useLandscapeOverlayTreatment || isBackdropExpanded) {
+                } else if (useLandscapePosters || isBackdropExpanded) {
                     Text(
                         text = item.title,
                         style = titleStyle,

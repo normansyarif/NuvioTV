@@ -102,7 +102,6 @@ internal fun SubtitleSelectionOverlay(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val noneLabel = stringResource(R.string.subtitle_none)
     val languageItems = remember(
         internalTracks,
         addonSubtitles,
@@ -113,8 +112,7 @@ internal fun SubtitleSelectionOverlay(
             internalTracks = internalTracks,
             addonSubtitles = addonSubtitles,
             preferredLanguage = subtitleStyle.preferredLanguage,
-            secondaryPreferredLanguage = subtitleStyle.secondaryPreferredLanguage,
-            noneLabel = noneLabel
+            secondaryPreferredLanguage = subtitleStyle.secondaryPreferredLanguage
         )
     }
     val initialLanguageKey = remember(languageItems, selectedInternalIndex, selectedAddonSubtitle, internalTracks) {
@@ -1151,8 +1149,7 @@ private fun buildSubtitleLanguageRailItems(
     internalTracks: List<TrackInfo>,
     addonSubtitles: List<Subtitle>,
     preferredLanguage: String,
-    secondaryPreferredLanguage: String?,
-    noneLabel: String
+    secondaryPreferredLanguage: String?
 ): List<SubtitleLanguageRailItem> {
     val counts = linkedMapOf<String, Int>()
     internalTracks.forEach { track ->
@@ -1190,7 +1187,7 @@ private fun buildSubtitleLanguageRailItems(
     return listOf(
         SubtitleLanguageRailItem(
             key = SubtitleOffLanguageKey,
-            label = noneLabel,
+            label = Subtitle.languageCodeToName("none"),
             count = 0
         )
     ) + sortedItems

@@ -32,6 +32,13 @@ class WatchProgressPreferences @Inject constructor(
     private val gson = Gson()
     private val watchProgressKey = stringPreferencesKey("watch_progress_map")
 
+    // Maximum items to keep in continue watching
+    private val maxItems = 50
+    
+    private val maxEpisodesPerContent = 25
+   
+    private val maxStoredEntries = 300
+
     /**
      * Get all watch progress items, sorted by last watched (most recent first)
      * For series, only returns the series-level entry (not individual episode entries)
@@ -122,19 +129,19 @@ class WatchProgressPreferences @Inject constructor(
         store().edit { preferences ->
             val json = preferences[watchProgressKey] ?: "{}"
             val map = parseProgressMap(json).toMutableMap()
-            upsertProgressEntries(map, listOf(progress))
+            
+            val key = createKey(progress)
+            map[key] = progress
 
-            val pruned = pruneOldItems(map)
-            preferences[watchProgressKey] = gson.toJson(pruned)
-        }
-    }
+            if (progress.season != null && progress.episode != null) {
+                val seriesKey = progress.contentId
+                val existingSeriesProgress = map[seriesKey]
+                
+                if (existingSeriesProgress == null || progress.lastWatched > existingSeriesProgress.lastWatched) {
+                    map[seriesKey] = progress.copy(videoId = progress.videoId)
+                }
+            }
 
-    suspend fun saveProgressBatch(progressList: List<WatchProgress>) {
-        if (progressList.isEmpty()) return
-        store().edit { preferences ->
-            val json = preferences[watchProgressKey] ?: "{}"
-            val map = parseProgressMap(json).toMutableMap()
-            upsertProgressEntries(map, progressList)
             val pruned = pruneOldItems(map)
             preferences[watchProgressKey] = gson.toJson(pruned)
         }
@@ -229,7 +236,7 @@ class WatchProgressPreferences @Inject constructor(
             for ((key, remote) in remoteEntries) {
                 val existing = local[key]
                 if (existing == null || remote.lastWatched > existing.lastWatched) {
-                    local[key] = mergeDisplayMetadata(remote, existing)
+                    local[key] = remote
                     Log.d("WatchProgressPrefs", "  merged key=$key (existing=${existing != null})")
                 } else {
                     Log.d("WatchProgressPrefs", "  skipped key=$key (local is newer)")
@@ -251,10 +258,7 @@ class WatchProgressPreferences @Inject constructor(
                 Log.w(TAG, "replaceWithRemoteEntries: remote empty while local has ${current.size} entries; preserving local watch progress")
                 return@edit
             }
-            val merged = remoteEntries.mapValues { (key, remote) ->
-                mergeDisplayMetadata(remote, current[key])
-            }.toMutableMap()
-            val pruned = pruneOldItems(merged)
+            val pruned = pruneOldItems(remoteEntries.toMutableMap())
             Log.d("WatchProgressPrefs", "replaceWithRemoteEntries: ${pruned.size} entries after prune, writing to DataStore")
             preferences[watchProgressKey] = gson.toJson(pruned)
         }
@@ -275,37 +279,6 @@ class WatchProgressPreferences @Inject constructor(
         } else {
             progress.contentId
         }
-    }
-
-    private fun upsertProgressEntries(
-        map: MutableMap<String, WatchProgress>,
-        progressList: List<WatchProgress>
-    ) {
-        progressList.forEach { progress ->
-            val key = createKey(progress)
-            map[key] = progress
-
-            if (progress.season != null && progress.episode != null) {
-                val seriesKey = progress.contentId
-                val existingSeriesProgress = map[seriesKey]
-
-                if (existingSeriesProgress == null || progress.lastWatched > existingSeriesProgress.lastWatched) {
-                    map[seriesKey] = progress.copy(videoId = progress.videoId)
-                }
-            }
-        }
-    }
-
-    private fun mergeDisplayMetadata(remote: WatchProgress, existing: WatchProgress?): WatchProgress {
-        if (existing == null) return remote
-        return remote.copy(
-            name = remote.name.takeIf { it.isNotBlank() } ?: existing.name,
-            poster = remote.poster ?: existing.poster,
-            backdrop = remote.backdrop ?: existing.backdrop,
-            logo = remote.logo ?: existing.logo,
-            episodeTitle = remote.episodeTitle ?: existing.episodeTitle,
-            addonBaseUrl = remote.addonBaseUrl ?: existing.addonBaseUrl
-        )
     }
 
     private fun parseProgressMap(json: String): Map<String, WatchProgress> {
@@ -413,6 +386,75 @@ class WatchProgressPreferences @Inject constructor(
     }
 
     private fun pruneOldItems(map: MutableMap<String, WatchProgress>): Map<String, WatchProgress> {
-        return map
+        if (map.isEmpty()) return map
+
+        val latestByContent = map.values
+            .groupBy { it.contentId }
+            .mapValues { (_, items) -> items.maxOf { it.lastWatched } }
+
+        val inProgressContentIds = map.values
+            .asSequence()
+            .filter { it.isInProgress() }
+            .map { it.contentId }
+            .toSet()
+
+        val sortedContentIds = latestByContent
+            .entries
+            .sortedByDescending { it.value }
+            .map { it.key }
+
+        val keepContentIds = buildList {
+            sortedContentIds
+                .filter { it in inProgressContentIds }
+                .forEach { add(it) }
+            sortedContentIds
+                .filter { it !in inProgressContentIds }
+                .forEach { add(it) }
+        }
+            .distinct()
+            .take(maxItems)
+
+        val keepContentIdSet = keepContentIds.toSet()
+
+        val filteredByContent = map.filterValues { it.contentId in keepContentIdSet }
+        val boundedByContent = mutableMapOf<String, WatchProgress>()
+
+        keepContentIds.forEach { contentId ->
+            val entriesForContent = filteredByContent.filterValues { it.contentId == contentId }
+
+            // Keep canonical content-level record when present.
+            entriesForContent[contentId]?.let { boundedByContent[contentId] = it }
+
+            val recentEpisodeEntries = entriesForContent
+                .filterKeys { it != contentId }
+                .entries
+                .sortedByDescending { it.value.lastWatched }
+                .take(maxEpisodesPerContent)
+
+            recentEpisodeEntries.forEach { (key, value) ->
+                boundedByContent[key] = value
+            }
+        }
+
+        if (boundedByContent.size <= maxStoredEntries) return boundedByContent
+
+        val pinnedContentKeys = keepContentIds.filter { boundedByContent.containsKey(it) }.toSet()
+        val remainingSlots = (maxStoredEntries - pinnedContentKeys.size).coerceAtLeast(0)
+
+        val limited = mutableMapOf<String, WatchProgress>()
+        pinnedContentKeys.forEach { key ->
+            boundedByContent[key]?.let { limited[key] = it }
+        }
+
+        boundedByContent.entries
+            .asSequence()
+            .filter { (key, _) -> key !in pinnedContentKeys }
+            .sortedByDescending { (_, value) -> value.lastWatched }
+            .take(remainingSlots)
+            .forEach { (key, value) ->
+                limited[key] = value
+            }
+
+        return limited
     }
 }

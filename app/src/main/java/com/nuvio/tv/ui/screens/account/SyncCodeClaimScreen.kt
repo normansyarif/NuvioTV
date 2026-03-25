@@ -53,7 +53,9 @@ fun SyncCodeClaimScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
 
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NuvioColors.Background),
         contentAlignment = Alignment.Center
     ) {
         Column(
