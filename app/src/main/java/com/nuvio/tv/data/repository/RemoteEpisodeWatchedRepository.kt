@@ -15,9 +15,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "RemoteEpisodeWatched"
-private const val WATCHED_STATUS_BASE_URL = "https://normansyarif.my.id/stremio-watched/watched-status.php"
-private const val TMDB_MARK_URL = "https://normansyarif.my.id/stremio/tmdb_mark.php"
-private const val MARK_REFERRER_BASE_URL = "https://normansyarif.my.id/stremio-watched/mark.php"
+private const val WATCHED_STATUS_BASE_URL = "https://addon.syf.my.id/stremio-watched/watched-status.php"
+private const val TMDB_MARK_URL = "https://addon.syf.my.id/stremio/tmdb_mark.php"
+private const val MARK_REFERRER_BASE_URL = "https://addon.syf.my.id/stremio-watched/mark.php"
 
 @Singleton
 class RemoteEpisodeWatchedRepository @Inject constructor(

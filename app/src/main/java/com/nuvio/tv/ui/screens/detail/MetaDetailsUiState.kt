@@ -33,6 +33,11 @@ data class MetaDetailsUiState(
     val pickerMembership: Map<String, Boolean> = emptyMap(),
     val pickerPending: Boolean = false,
     val pickerError: String? = null,
+    val isTitleRatingSupported: Boolean = false,
+    val titleRating: Int? = null,
+    val isTitleRatingLoading: Boolean = false,
+    val isTitleRatingUpdating: Boolean = false,
+    val showTitleRatingDialog: Boolean = false,
     val isMovieWatched: Boolean = false,
     val isMovieWatchedPending: Boolean = false,
     val watchedEpisodes: Set<Pair<Int, Int>> = emptySet(),
@@ -71,5 +76,9 @@ sealed class MetaDetailsEvent {
     data class OnPickerMembershipToggled(val listKey: String) : MetaDetailsEvent()
     data object OnPickerSave : MetaDetailsEvent()
     data object OnPickerDismiss : MetaDetailsEvent()
+    data object OnTitleRatingButtonClick : MetaDetailsEvent()
+    data object OnTitleRatingDialogDismiss : MetaDetailsEvent()
+    data class OnTitleRatingSelected(val rating: Int) : MetaDetailsEvent()
+    data object OnTitleRatingRemove : MetaDetailsEvent()
     data object OnClearMessage : MetaDetailsEvent()
 }
