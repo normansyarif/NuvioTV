@@ -15,6 +15,7 @@ import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import com.nuvio.tv.data.repository.ImdbEpisodeRatingsRepository
 import com.nuvio.tv.data.repository.MDBListRepository
 import com.nuvio.tv.data.repository.RemoteEpisodeWatchedRepository
+import com.nuvio.tv.data.repository.RemoteTitleRatingRepository
 import com.nuvio.tv.data.repository.parseContentIds
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.LibraryEntryInput
@@ -57,6 +58,11 @@ import javax.inject.Inject
 
 private const val TAG = "MetaDetailsViewModel"
 
+private data class TitleRatingRequestInfo(
+    val tmdbId: String,
+    val mediaType: String
+)
+
 @HiltViewModel
 class MetaDetailsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -67,6 +73,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val imdbEpisodeRatingsRepository: ImdbEpisodeRatingsRepository,
     private val mdbListRepository: MDBListRepository,
     private val remoteEpisodeWatchedRepository: RemoteEpisodeWatchedRepository,
+    private val remoteTitleRatingRepository: RemoteTitleRatingRepository,
     private val libraryRepository: LibraryRepository,
     private val watchProgressRepository: WatchProgressRepository,
     private val trailerService: TrailerService,
@@ -92,6 +99,9 @@ class MetaDetailsViewModel @Inject constructor(
     private var episodeRatingsJob: Job? = null
     private var nextToWatchJob: Job? = null
     private var remoteWatchedStatusJob: Job? = null
+    private var titleRatingJob: Job? = null
+
+    private var cachedTitleRatingRequestInfo: TitleRatingRequestInfo? = null
 
     private var trailerDelayMs = 7000L
     private var trailerAutoplayEnabled = false
@@ -212,6 +222,10 @@ class MetaDetailsViewModel @Inject constructor(
             is MetaDetailsEvent.OnPickerMembershipToggled -> togglePickerMembership(event.listKey)
             MetaDetailsEvent.OnPickerSave -> savePickerMembership()
             MetaDetailsEvent.OnPickerDismiss -> dismissListPicker()
+            MetaDetailsEvent.OnTitleRatingButtonClick -> openTitleRatingDialog()
+            MetaDetailsEvent.OnTitleRatingDialogDismiss -> dismissTitleRatingDialog()
+            is MetaDetailsEvent.OnTitleRatingSelected -> updateTitleRating(event.rating)
+            MetaDetailsEvent.OnTitleRatingRemove -> removeTitleRating()
             MetaDetailsEvent.OnClearMessage -> clearMessage()
         }
     }
@@ -332,6 +346,11 @@ class MetaDetailsViewModel @Inject constructor(
                 it.copy(
                     isLoading = true,
                     error = null,
+                    isTitleRatingSupported = false,
+                    titleRating = null,
+                    isTitleRatingLoading = false,
+                    isTitleRatingUpdating = false,
+                    showTitleRatingDialog = false,
                     watchedEpisodes = emptySet(),
                     isEpisodeWatchedStatusLoading = false,
                     episodeWatchedPendingKeys = emptySet(),
@@ -345,6 +364,8 @@ class MetaDetailsViewModel @Inject constructor(
                     collectionName = null
                 )
             }
+            cachedTitleRatingRequestInfo = null
+            titleRatingJob?.cancel()
 
             val metaLookupId = resolveMetaLookupId(itemId = itemId, itemType = itemType)
             val preferExternal = layoutPreferenceDataStore.preferExternalMetaAddonDetail.first()
@@ -443,13 +464,15 @@ class MetaDetailsViewModel @Inject constructor(
                 seasons = seasons,
                 selectedSeason = selectedSeason,
                 episodesForSeason = episodesForSeason,
-                error = null
+                error = null,
+                isTitleRatingSupported = supportsTitleRating(meta)
             )
         }
         
         // Calculate next to watch after meta is loaded
         calculateNextToWatch()
         refreshEpisodeWatchedStatuses()
+        refreshTitleRating()
 
         // Start fetching trailer after meta is loaded
         fetchTrailerUrl()
@@ -854,6 +877,178 @@ class MetaDetailsViewModel @Inject constructor(
             "series", "tv", "show", "tvshow" -> ContentType.SERIES
             else -> null
         }
+    }
+
+    private fun supportsTitleRating(meta: Meta): Boolean {
+        return when (resolveTmdbContentType(meta)) {
+            ContentType.MOVIE,
+            ContentType.SERIES,
+            ContentType.TV -> true
+            else -> false
+        }
+    }
+
+    private fun openTitleRatingDialog() {
+        val state = _uiState.value
+        if (!state.isTitleRatingSupported || state.isTitleRatingLoading) return
+        _uiState.update { current ->
+            if (current.showTitleRatingDialog) current else current.copy(showTitleRatingDialog = true)
+        }
+    }
+
+    private fun dismissTitleRatingDialog() {
+        _uiState.update { state ->
+            if (!state.showTitleRatingDialog) state else state.copy(showTitleRatingDialog = false)
+        }
+    }
+
+    fun refreshTitleRating() {
+        val meta = _uiState.value.meta ?: return
+        if (!supportsTitleRating(meta)) {
+            _uiState.update { state ->
+                state.copy(
+                    isTitleRatingSupported = false,
+                    titleRating = null,
+                    isTitleRatingLoading = false,
+                    isTitleRatingUpdating = false,
+                    showTitleRatingDialog = false
+                )
+            }
+            return
+        }
+
+        titleRatingJob?.cancel()
+        titleRatingJob = viewModelScope.launch {
+            _uiState.update { state ->
+                state.copy(
+                    isTitleRatingSupported = true,
+                    isTitleRatingLoading = true
+                )
+            }
+
+            val requestInfo = resolveTitleRatingRequestInfo(meta)
+            if (requestInfo == null) {
+                _uiState.update { state ->
+                    state.copy(
+                        isTitleRatingLoading = false,
+                        isTitleRatingSupported = false
+                    )
+                }
+                return@launch
+            }
+
+            cachedTitleRatingRequestInfo = requestInfo
+            val result = remoteTitleRatingRepository.fetchRating(
+                tmdbId = requestInfo.tmdbId,
+                mediaType = requestInfo.mediaType
+            )
+
+            result.onSuccess { rating ->
+                _uiState.update { state ->
+                    state.copy(
+                        titleRating = rating,
+                        isTitleRatingLoading = false,
+                        isTitleRatingSupported = true
+                    )
+                }
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to fetch title rating: ${error.message}")
+                _uiState.update { state ->
+                    state.copy(
+                        isTitleRatingLoading = false,
+                        isTitleRatingSupported = true
+                    )
+                }
+            }
+        }
+    }
+
+    private fun updateTitleRating(rating: Int) {
+        if (rating !in 1..10) return
+        submitTitleRatingChange(remove = false, rating = rating)
+    }
+
+    private fun removeTitleRating() {
+        submitTitleRatingChange(remove = true, rating = null)
+    }
+
+    private fun submitTitleRatingChange(
+        remove: Boolean,
+        rating: Int?
+    ) {
+        val meta = _uiState.value.meta ?: return
+        if (!supportsTitleRating(meta) || _uiState.value.isTitleRatingUpdating) return
+
+        viewModelScope.launch {
+            val requestInfo = cachedTitleRatingRequestInfo ?: resolveTitleRatingRequestInfo(meta)
+            if (requestInfo == null) {
+                showMessage(context.getString(R.string.detail_rating_failed_update), isError = true)
+                return@launch
+            }
+            cachedTitleRatingRequestInfo = requestInfo
+
+            _uiState.update { state ->
+                state.copy(isTitleRatingUpdating = true)
+            }
+
+            val result = if (remove) {
+                remoteTitleRatingRepository.removeRating(
+                    tmdbId = requestInfo.tmdbId,
+                    mediaType = requestInfo.mediaType
+                )
+            } else {
+                remoteTitleRatingRepository.setRating(
+                    tmdbId = requestInfo.tmdbId,
+                    mediaType = requestInfo.mediaType,
+                    rating = requireNotNull(rating)
+                )
+            }
+
+            result.onSuccess { updatedRating ->
+                _uiState.update { state ->
+                    state.copy(
+                        titleRating = updatedRating,
+                        isTitleRatingUpdating = false,
+                        showTitleRatingDialog = false
+                    )
+                }
+                showMessage(
+                    if (remove) {
+                        context.getString(R.string.detail_rating_removed)
+                    } else {
+                        context.getString(R.string.detail_rating_set, updatedRating ?: rating ?: 0)
+                    }
+                )
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to update title rating: ${error.message}")
+                _uiState.update { state ->
+                    state.copy(isTitleRatingUpdating = false)
+                }
+                showMessage(
+                    error.message?.takeIf { it.isNotBlank() }
+                        ?: context.getString(R.string.detail_rating_failed_update),
+                    isError = true
+                )
+            }
+        }
+    }
+
+    private suspend fun resolveTitleRatingRequestInfo(meta: Meta): TitleRatingRequestInfo? {
+        val tmdbContentType = resolveTmdbContentType(meta)
+        val tmdbLookupType = tmdbContentType.toApiString()
+        val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
+            ?: tmdbService.ensureTmdbId(itemId, itemType)
+            ?: return null
+        val mediaType = when (tmdbContentType) {
+            ContentType.MOVIE -> "movie"
+            ContentType.SERIES,
+            ContentType.TV -> "tv"
+            else -> return null
+        }
+        return TitleRatingRequestInfo(
+            tmdbId = tmdbId,
+            mediaType = mediaType
+        )
     }
 
     private fun selectSeason(season: Int) {
@@ -1704,5 +1899,6 @@ class MetaDetailsViewModel @Inject constructor(
         idleTimerJob?.cancel()
         trailerFetchJob?.cancel()
         nextToWatchJob?.cancel()
+        titleRatingJob?.cancel()
     }
 }

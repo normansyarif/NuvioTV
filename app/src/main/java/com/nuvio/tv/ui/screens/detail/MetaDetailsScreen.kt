@@ -20,11 +20,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewResponder
 import androidx.compose.foundation.relocation.bringIntoViewResponder
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.CircularProgressIndicator as MaterialCircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -78,6 +82,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -388,6 +393,10 @@ fun MetaDetailsScreen(
                     episodeRatingsError = uiState.episodeRatingsError,
                     mdbListRatings = uiState.mdbListRatings,
                     showMdbListImdb = uiState.showMdbListImdb,
+                    isTitleRatingSupported = uiState.isTitleRatingSupported,
+                    titleRating = uiState.titleRating,
+                    isTitleRatingLoading = uiState.isTitleRatingLoading,
+                    isTitleRatingUpdating = uiState.isTitleRatingUpdating,
                     onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
                     onEpisodeClick = { video ->
                         onPlayClick(
@@ -461,6 +470,7 @@ fun MetaDetailsScreen(
                     onPlayButtonFocused = { viewModel.onEvent(MetaDetailsEvent.OnPlayButtonFocused) },
                     onToggleLibrary = { viewModel.onEvent(MetaDetailsEvent.OnToggleLibrary) },
                     onLibraryLongPress = { viewModel.onEvent(MetaDetailsEvent.OnLibraryLongPress) },
+                    onTitleRatingClick = { viewModel.onEvent(MetaDetailsEvent.OnTitleRatingButtonClick) },
                     onToggleMovieWatched = { viewModel.onEvent(MetaDetailsEvent.OnToggleMovieWatched) },
                     onToggleEpisodeWatched = { video ->
                         viewModel.onEvent(MetaDetailsEvent.OnToggleEpisodeWatched(video))
@@ -533,6 +543,19 @@ fun MetaDetailsScreen(
                     onNavigateToDetail = onNavigateToDetail
                 )
             }
+        }
+
+        if (uiState.showTitleRatingDialog) {
+            TitleRatingDialog(
+                title = uiState.meta?.name ?: stringResource(R.string.tmdb_details_title),
+                currentRating = uiState.titleRating,
+                isUpdating = uiState.isTitleRatingUpdating,
+                onSetRating = { rating ->
+                    viewModel.onEvent(MetaDetailsEvent.OnTitleRatingSelected(rating))
+                },
+                onRemoveRating = { viewModel.onEvent(MetaDetailsEvent.OnTitleRatingRemove) },
+                onDismiss = { viewModel.onEvent(MetaDetailsEvent.OnTitleRatingDialogDismiss) }
+            )
         }
 
         if (uiState.showListPicker) {
@@ -622,6 +645,10 @@ private fun MetaDetailsContent(
     episodeRatingsError: String?,
     mdbListRatings: MDBListRatings?,
     showMdbListImdb: Boolean,
+    isTitleRatingSupported: Boolean,
+    titleRating: Int?,
+    isTitleRatingLoading: Boolean,
+    isTitleRatingUpdating: Boolean,
     onSeasonSelected: (Int) -> Unit,
     onEpisodeClick: (Video) -> Unit,
     onEpisodeManualPlayClick: (Video) -> Unit,
@@ -631,6 +658,7 @@ private fun MetaDetailsContent(
     onPlayButtonFocused: () -> Unit,
     onToggleLibrary: () -> Unit,
     onLibraryLongPress: () -> Unit,
+    onTitleRatingClick: () -> Unit,
     onToggleMovieWatched: () -> Unit,
     onToggleEpisodeWatched: (Video) -> Unit,
     onMarkSeasonWatched: (Int) -> Unit,
@@ -1180,6 +1208,11 @@ private fun MetaDetailsContent(
                                 onLibraryLongPress()
                             }
                         },
+                        isTitleRatingSupported = isTitleRatingSupported,
+                        titleRating = titleRating,
+                        isTitleRatingLoading = isTitleRatingLoading,
+                        isTitleRatingUpdating = isTitleRatingUpdating,
+                        onTitleRatingClick = onTitleRatingClick,
                         isMovieWatched = isMovieWatched,
                         isMovieWatchedPending = isMovieWatchedPending,
                         onToggleMovieWatched = onToggleMovieWatched,
@@ -1472,6 +1505,118 @@ private fun PlayManualOverrideDialog(
             )
         ) {
             Text(stringResource(R.string.play_manually))
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun TitleRatingDialog(
+    title: String,
+    currentRating: Int?,
+    isUpdating: Boolean,
+    onSetRating: (Int) -> Unit,
+    onRemoveRating: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val ratingFocusRequesters = remember { List(10) { FocusRequester() } }
+
+    LaunchedEffect(currentRating) {
+        val initialIndex = (currentRating ?: 1).coerceIn(1, 10) - 1
+        runCatching { ratingFocusRequesters[initialIndex].requestFocus() }
+    }
+
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.detail_rating_title),
+        subtitle = if (currentRating != null) {
+            stringResource(R.string.detail_rating_current, currentRating)
+        } else {
+            stringResource(R.string.detail_rating_subtitle, title)
+        },
+        width = 560.dp,
+        suppressFirstKeyUp = false
+    ) {
+        if (isUpdating) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                MaterialCircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = NuvioColors.TextPrimary,
+                    trackColor = Color.Transparent
+                )
+                Text(
+                    text = stringResource(R.string.detail_rating_updating),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioColors.TextSecondary
+                )
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            repeat(5) { rowIndex ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    repeat(2) { columnIndex ->
+                        val rating = rowIndex * 2 + columnIndex + 1
+                        val isSelected = currentRating == rating
+                        Button(
+                            onClick = { onSetRating(rating) },
+                            enabled = !isUpdating,
+                            modifier = Modifier
+                                .width(240.dp)
+                                .focusRequester(ratingFocusRequesters[rating - 1]),
+                            colors = ButtonDefaults.colors(
+                                containerColor = if (isSelected) {
+                                    NuvioColors.FocusBackground
+                                } else {
+                                    NuvioColors.BackgroundCard
+                                },
+                                contentColor = NuvioColors.TextPrimary
+                            )
+                        ) {
+                            Text(
+                                text = if (isSelected) {
+                                    stringResource(R.string.detail_rating_option_selected, rating)
+                                } else {
+                                    rating.toString()
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (currentRating != null) {
+            HorizontalDivider(color = NuvioColors.Border, thickness = 1.dp)
+
+            Button(
+                onClick = onRemoveRating,
+                enabled = !isUpdating,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioColors.BackgroundCard,
+                    contentColor = NuvioColors.TextPrimary
+                )
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = null
+                    )
+                    Text(stringResource(R.string.detail_rating_remove))
+                }
+            }
         }
     }
 }

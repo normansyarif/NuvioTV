@@ -70,6 +70,7 @@ import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.platform.LocalContext
@@ -94,6 +95,11 @@ fun HeroContentSection(
     onToggleMovieWatched: () -> Unit,
     trailerAvailable: Boolean = false,
     onTrailerClick: () -> Unit = {},
+    isTitleRatingSupported: Boolean = false,
+    titleRating: Int? = null,
+    isTitleRatingLoading: Boolean = false,
+    isTitleRatingUpdating: Boolean = false,
+    onTitleRatingClick: () -> Unit = {},
     hideLogoDuringTrailer: Boolean = false,
     mdbListRatings: MDBListRatings? = null,
     hideMetaInfoImdb: Boolean = false,
@@ -283,6 +289,26 @@ fun HeroContentSection(
                                 painter = trailerPainter,
                                 contentDescription = stringResource(R.string.hero_play_trailer),
                                 onClick = onTrailerClick,
+                                onFocused = onHeroActionFocused
+                            )
+                        }
+
+                        if (isTitleRatingSupported) {
+                            HeroActionButton(
+                                text = when {
+                                    titleRating != null -> stringResource(R.string.hero_rating_value, titleRating)
+                                    isTitleRatingLoading || isTitleRatingUpdating -> stringResource(R.string.hero_rating_loading)
+                                    else -> stringResource(R.string.hero_rating_unrated)
+                                },
+                                icon = Icons.Default.Star,
+                                contentDescription = if (titleRating != null) {
+                                    stringResource(R.string.hero_rating_button_rated, titleRating)
+                                } else {
+                                    stringResource(R.string.hero_rating_button_unrated)
+                                },
+                                onClick = onTitleRatingClick,
+                                enabled = !isTitleRatingLoading && !isTitleRatingUpdating,
+                                isLoading = isTitleRatingLoading || isTitleRatingUpdating,
                                 onFocused = onHeroActionFocused
                             )
                         }
@@ -486,6 +512,70 @@ private fun ActionIconButtonPainter(
             contentDescription = contentDescription,
             modifier = Modifier.size(22.dp)
         )
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
+@Composable
+private fun HeroActionButton(
+    text: String,
+    contentDescription: String,
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    enabled: Boolean = true,
+    isLoading: Boolean = false,
+    onFocused: () -> Unit = {}
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier
+            .onFocusChanged { state ->
+                if (state.isFocused) onFocused()
+            }
+            .focusProperties { up = FocusRequester.Cancel },
+        colors = ButtonDefaults.colors(
+            containerColor = NuvioColors.BackgroundCard,
+            focusedContainerColor = NuvioColors.Secondary,
+            contentColor = NuvioColors.TextPrimary,
+            focusedContentColor = NuvioColors.OnSecondary,
+            disabledContainerColor = NuvioColors.BackgroundCard,
+            disabledContentColor = NuvioColors.TextPrimary.copy(alpha = 0.72f)
+        ),
+        border = ButtonDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                shape = RoundedCornerShape(24.dp)
+            )
+        ),
+        shape = ButtonDefaults.shape(
+            shape = RoundedCornerShape(24.dp)
+        ),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (isLoading) {
+                MaterialCircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = Color.White,
+                    trackColor = Color.Transparent
+                )
+            } else if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = contentDescription,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge
+            )
+        }
     }
 }
 
