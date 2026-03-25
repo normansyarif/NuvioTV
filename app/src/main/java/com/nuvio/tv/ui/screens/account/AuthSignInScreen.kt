@@ -37,7 +37,9 @@ fun AuthSignInScreen(
     BackHandler { onBackPress() }
 
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NuvioColors.Background),
         contentAlignment = Alignment.Center
     ) {
         Column(

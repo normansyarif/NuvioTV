@@ -34,7 +34,6 @@ import com.nuvio.tv.domain.model.Subtitle
 import io.github.peerless2012.ass.media.type.AssRenderType
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -78,20 +77,17 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     resizeMode = playerSettings.resizeMode
                 )
             }
-            val afrJob = async {
-                runAfrPreflightIfEnabled(
-                    url = url,
-                    headers = headers,
-                    frameRateMatchingMode = playerSettings.frameRateMatchingMode,
-                    resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
-                )
-            }
+            runAfrPreflightIfEnabled(
+                url = url,
+                headers = headers,
+                frameRateMatchingMode = playerSettings.frameRateMatchingMode,
+                resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
+            )
             resolveCurrentStreamMimeType(
                 url = url,
                 headers = headers
             )
             val startupSubtitlePreparation = prepareStreamStartSubtitles(playerSettings)
-            afrJob.await()
             requestedUseLibassByUser = playerSettings.useLibass
             val useLibass = when {
                 !requestedUseLibassByUser -> false
@@ -489,7 +485,7 @@ internal suspend fun PlayerRuntimeController.prepareStartupSubtitles(
 }
 
 internal fun PlayerRuntimeController.resetAddonSubtitleStateForNewStream() {
-    autoSubtitleSelected = subtitleDisabledByPersistedPreference || subtitleAddonRestoredByPersistedPreference
+    autoSubtitleSelected = false
     hasScannedTextTracksOnce = false
     pendingAddonSubtitleLanguage = null
     pendingAddonSubtitleTrackId = null
@@ -578,7 +574,6 @@ private class SubtitleOffsetRenderersFactory(
             .setEnableFloatOutput(enableFloatOutput)
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
             .setAudioProcessors(arrayOf(gainAudioProcessor))
-            .setAudioTrackBufferSizeProvider(FormatAwareAudioTrackBufferProvider())
             .build()
     }
 

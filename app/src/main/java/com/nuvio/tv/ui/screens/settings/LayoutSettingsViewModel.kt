@@ -25,7 +25,6 @@ data class LayoutSettingsUiState(
     val modernSidebarEnabled: Boolean = false,
     val modernSidebarBlurEnabled: Boolean = false,
     val modernLandscapePostersEnabled: Boolean = false,
-    val modernHeroFullScreenBackdropEnabled: Boolean = false,
     val heroSectionEnabled: Boolean = true,
     val searchDiscoverEnabled: Boolean = true,
     val posterLabelsEnabled: Boolean = true,
@@ -43,8 +42,7 @@ data class LayoutSettingsUiState(
     val blurUnwatchedEpisodes: Boolean = false,
     val detailPageTrailerButtonEnabled: Boolean = false,
     val preferExternalMetaAddonDetail: Boolean = false,
-    val hideUnreleasedContent: Boolean = false,
-    val showFullReleaseDate: Boolean = true
+    val hideUnreleasedContent: Boolean = false
 )
 
 data class CatalogInfo(
@@ -60,7 +58,6 @@ sealed class LayoutSettingsEvent {
     data class SetModernSidebarEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetModernSidebarBlurEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetModernLandscapePostersEnabled(val enabled: Boolean) : LayoutSettingsEvent()
-    data class SetModernHeroFullScreenBackdropEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetHeroSectionEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetSearchDiscoverEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetPosterLabelsEnabled(val enabled: Boolean) : LayoutSettingsEvent()
@@ -79,7 +76,6 @@ sealed class LayoutSettingsEvent {
     data class SetDetailPageTrailerButtonEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetPreferExternalMetaAddonDetail(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetHideUnreleasedContent(val enabled: Boolean) : LayoutSettingsEvent()
-    data class SetShowFullReleaseDate(val enabled: Boolean) : LayoutSettingsEvent()
     data object ResetPosterCardStyle : LayoutSettingsEvent()
 }
 
@@ -136,11 +132,6 @@ class LayoutSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.modernLandscapePostersEnabled.distinctUntilChanged().collectLatest { enabled ->
                 updateUiStateIfChanged { it.copy(modernLandscapePostersEnabled = enabled) }
-            }
-        }
-        viewModelScope.launch {
-            layoutPreferenceDataStore.modernHeroFullScreenBackdropEnabled.distinctUntilChanged().collectLatest { enabled ->
-                updateUiStateIfChanged { it.copy(modernHeroFullScreenBackdropEnabled = enabled) }
             }
         }
         viewModelScope.launch {
@@ -228,11 +219,6 @@ class LayoutSettingsViewModel @Inject constructor(
                 updateUiStateIfChanged { it.copy(hideUnreleasedContent = enabled) }
             }
         }
-        viewModelScope.launch {
-            layoutPreferenceDataStore.showFullReleaseDate.distinctUntilChanged().collectLatest { enabled ->
-                updateUiStateIfChanged { it.copy(showFullReleaseDate = enabled) }
-            }
-        }
         loadAvailableCatalogs()
     }
 
@@ -244,7 +230,6 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetModernSidebarEnabled -> setModernSidebarEnabled(event.enabled)
             is LayoutSettingsEvent.SetModernSidebarBlurEnabled -> setModernSidebarBlurEnabled(event.enabled)
             is LayoutSettingsEvent.SetModernLandscapePostersEnabled -> setModernLandscapePostersEnabled(event.enabled)
-            is LayoutSettingsEvent.SetModernHeroFullScreenBackdropEnabled -> setModernHeroFullScreenBackdropEnabled(event.enabled)
             is LayoutSettingsEvent.SetHeroSectionEnabled -> setHeroSectionEnabled(event.enabled)
             is LayoutSettingsEvent.SetSearchDiscoverEnabled -> setSearchDiscoverEnabled(event.enabled)
             is LayoutSettingsEvent.SetPosterLabelsEnabled -> setPosterLabelsEnabled(event.enabled)
@@ -262,7 +247,6 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetDetailPageTrailerButtonEnabled -> setDetailPageTrailerButtonEnabled(event.enabled)
             is LayoutSettingsEvent.SetPreferExternalMetaAddonDetail -> setPreferExternalMetaAddonDetail(event.enabled)
             is LayoutSettingsEvent.SetHideUnreleasedContent -> setHideUnreleasedContent(event.enabled)
-            is LayoutSettingsEvent.SetShowFullReleaseDate -> setShowFullReleaseDate(event.enabled)
             LayoutSettingsEvent.ResetPosterCardStyle -> resetPosterCardStyle()
         }
     }
@@ -311,13 +295,6 @@ class LayoutSettingsViewModel @Inject constructor(
         if (_uiState.value.modernLandscapePostersEnabled == enabled) return
         viewModelScope.launch {
             layoutPreferenceDataStore.setModernLandscapePostersEnabled(enabled)
-        }
-    }
-
-    private fun setModernHeroFullScreenBackdropEnabled(enabled: Boolean) {
-        if (_uiState.value.modernHeroFullScreenBackdropEnabled == enabled) return
-        viewModelScope.launch {
-            layoutPreferenceDataStore.setModernHeroFullScreenBackdropEnabled(enabled)
         }
     }
 
@@ -432,13 +409,6 @@ class LayoutSettingsViewModel @Inject constructor(
         if (_uiState.value.hideUnreleasedContent == enabled) return
         viewModelScope.launch {
             layoutPreferenceDataStore.setHideUnreleasedContent(enabled)
-        }
-    }
-
-    private fun setShowFullReleaseDate(enabled: Boolean) {
-        if (_uiState.value.showFullReleaseDate == enabled) return
-        viewModelScope.launch {
-            layoutPreferenceDataStore.setShowFullReleaseDate(enabled)
         }
     }
 

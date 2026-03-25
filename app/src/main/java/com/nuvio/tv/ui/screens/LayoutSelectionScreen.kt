@@ -72,6 +72,7 @@ fun LayoutSelectionScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(NuvioColors.Background)
     ) {
         Column(
             modifier = Modifier

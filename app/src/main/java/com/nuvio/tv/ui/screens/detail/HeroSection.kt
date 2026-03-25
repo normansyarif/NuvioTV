@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -63,24 +62,20 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import android.util.Log
 import com.nuvio.tv.R
-import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MDBListRatings
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.NextToWatch
-import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.painter.Painter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
-import java.util.Locale
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -97,17 +92,11 @@ fun HeroContentSection(
     isMovieWatched: Boolean,
     isMovieWatchedPending: Boolean,
     onToggleMovieWatched: () -> Unit,
-    titleRating: Int? = null,
-    isTitleRatingLoading: Boolean = false,
-    isTitleRatingUpdating: Boolean = false,
-    onUpdateTitleRating: (Int) -> Unit = {},
-    onRemoveTitleRating: () -> Unit = {},
     trailerAvailable: Boolean = false,
     onTrailerClick: () -> Unit = {},
     hideLogoDuringTrailer: Boolean = false,
     mdbListRatings: MDBListRatings? = null,
     hideMetaInfoImdb: Boolean = false,
-    showFullReleaseDate: Boolean = true,
     isTrailerPlaying: Boolean = false,
     playButtonFocusRequester: FocusRequester? = null,
     restorePlayFocusToken: Int = 0,
@@ -115,25 +104,15 @@ fun HeroContentSection(
     onPlayFocusRestored: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    var showRatingDialog by remember { mutableStateOf(false) }
-    var closeRatingDialogAfterUpdate by remember { mutableStateOf(false) }
     val isSeriesApi = remember(meta.apiType) {
         meta.apiType.equals("series", ignoreCase = true) || meta.apiType.equals("tv", ignoreCase = true)
     }
     val isPlayLoading = isSeriesApi && isEpisodeWatchedStatusLoading
-
-    LaunchedEffect(isTitleRatingUpdating, closeRatingDialogAfterUpdate) {
-        if (!isTitleRatingUpdating && closeRatingDialogAfterUpdate) {
-            showRatingDialog = false
-            closeRatingDialogAfterUpdate = false
-        }
-    }
     val logoModel = remember(context, meta.logo) {
         meta.logo?.let { logo ->
             ImageRequest.Builder(context)
                 .data(logo)
                 .crossfade(true)
-                .decoderFactory(SvgDecoder.Factory())
                 .build()
         }
     }
@@ -299,13 +278,6 @@ fun HeroContentSection(
                             )
                         }
 
-                        RatingActionButton(
-                            rating = titleRating,
-                            isLoading = isTitleRatingLoading || isTitleRatingUpdating,
-                            onClick = { showRatingDialog = true },
-                            onFocused = onHeroActionFocused
-                        )
-
                         if (trailerAvailable) {
                             ActionIconButtonPainter(
                                 painter = trailerPainter,
@@ -349,35 +321,10 @@ fun HeroContentSection(
                         )
                     }
 
-                    MetaInfoRow(meta = meta, hideImdbRating = hideMetaInfoImdb, showFullReleaseDate = showFullReleaseDate)
+                    MetaInfoRow(meta = meta, hideImdbRating = hideMetaInfoImdb)
                 }
             }
         }
-    }
-
-    if (showRatingDialog) {
-        RatingPickerDialog(
-            currentRating = titleRating,
-            isPending = isTitleRatingUpdating,
-            onDismiss = {
-                if (!isTitleRatingUpdating) {
-                    showRatingDialog = false
-                    closeRatingDialogAfterUpdate = false
-                }
-            },
-            onRateSelected = { rating ->
-                onUpdateTitleRating(rating)
-                closeRatingDialogAfterUpdate = true
-            },
-            onRemoveRating = if (titleRating != null) {
-                {
-                    onRemoveTitleRating()
-                    closeRatingDialogAfterUpdate = true
-                }
-            } else {
-                null
-            }
-        )
     }
 }
 
@@ -635,184 +582,17 @@ private fun ActionIconButton(
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
-@Composable
-private fun RatingActionButton(
-    rating: Int?,
-    isLoading: Boolean,
-    onClick: () -> Unit,
-    onFocused: () -> Unit = {}
-) {
-    val label = when {
-        rating != null -> stringResource(R.string.detail_rating_value, rating)
-        else -> stringResource(R.string.detail_rating_rate)
-    }
-
-    Button(
-        onClick = onClick,
-        enabled = !isLoading,
-        modifier = Modifier
-            .wrapContentWidth()
-            .onFocusChanged { state ->
-                if (state.isFocused) onFocused()
-            }
-            .focusProperties { up = FocusRequester.Cancel },
-        colors = ButtonDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.Secondary,
-            contentColor = NuvioColors.TextPrimary,
-            focusedContentColor = NuvioColors.OnSecondary
-        ),
-        border = ButtonDefaults.border(
-            focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                shape = RoundedCornerShape(24.dp)
-            )
-        ),
-        shape = ButtonDefaults.shape(shape = RoundedCornerShape(24.dp)),
-        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (isLoading) {
-                MaterialCircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = NuvioColors.TextPrimary,
-                    trackColor = Color.Transparent
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Default.Star,
-                    contentDescription = stringResource(R.string.detail_rating),
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun RatingPickerDialog(
-    currentRating: Int?,
-    isPending: Boolean,
-    onDismiss: () -> Unit,
-    onRateSelected: (Int) -> Unit,
-    onRemoveRating: (() -> Unit)?
-) {
-    val focusRequesters = remember { (1..10).associateWith { FocusRequester() } }
-    val removeFocusRequester = remember { FocusRequester() }
-    val initialRating = currentRating?.coerceIn(1, 10) ?: 1
-
-    LaunchedEffect(currentRating, onRemoveRating) {
-        if (onRemoveRating != null && currentRating != null) {
-            focusRequesters[currentRating]?.requestFocus()
-        } else {
-            focusRequesters[initialRating]?.requestFocus()
-        }
-    }
-
-    NuvioDialog(
-        onDismiss = onDismiss,
-        title = stringResource(R.string.detail_rating_dialog_title),
-        subtitle = stringResource(R.string.detail_rating_dialog_subtitle),
-        suppressFirstKeyUp = false
-    ) {
-        if (isPending) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                MaterialCircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
-                    color = NuvioColors.TextPrimary,
-                    trackColor = Color.Transparent
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(stringResource(R.string.detail_rating_saving))
-            }
-        }
-
-        (1..10).chunked(5).forEach { rowRatings ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                rowRatings.forEach { rating ->
-                    val isSelected = currentRating == rating
-                    Button(
-                        onClick = { onRateSelected(rating) },
-                        enabled = !isPending,
-                        modifier = Modifier
-                            .weight(1f)
-                            .then(
-                                if (rating == (currentRating?.coerceIn(1, 10) ?: initialRating)) {
-                                    Modifier.focusRequester(focusRequesters.getValue(rating))
-                                } else {
-                                    Modifier
-                                }
-                            ),
-                        colors = ButtonDefaults.colors(
-                            containerColor = if (isSelected) Color.White else NuvioColors.BackgroundCard,
-                            focusedContainerColor = Color.White,
-                            contentColor = if (isSelected) Color.Black else NuvioColors.TextPrimary,
-                            focusedContentColor = Color.Black
-                        )
-                    ) {
-                        Text(rating.toString())
-                    }
-                }
-            }
-        }
-
-        onRemoveRating?.let {
-            Button(
-                onClick = it,
-                enabled = !isPending,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(removeFocusRequester),
-                colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundCard,
-                    contentColor = NuvioColors.TextPrimary
-                )
-            ) {
-                Text(stringResource(R.string.detail_rating_remove))
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun MetaInfoRow(
     meta: Meta,
-    hideImdbRating: Boolean,
-    showFullReleaseDate: Boolean = true
+    hideImdbRating: Boolean
 ) {
     val context = LocalContext.current
     val genresText = remember(meta.genres) { meta.genres.joinToString(" • ") }
     val runtimeText = remember(meta.runtime) { meta.runtime?.let { formatRuntime(it) } }
-    val yearText = remember(meta.releaseInfo, meta.released, meta.type, showFullReleaseDate) {
-        if (showFullReleaseDate && meta.type == ContentType.MOVIE) {
-            meta.released
-                ?.let { runCatching { java.time.OffsetDateTime.parse(it).toLocalDate() }.getOrNull() }
-                ?.let { val locale = java.util.Locale.getDefault(); java.text.SimpleDateFormat(android.text.format.DateFormat.getBestDateTimePattern(locale, "dMMMMy"), locale).format(java.util.Date(it.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli())) }
-                ?: meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
-        } else {
-            meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
-        }
+    val yearText = remember(meta.releaseInfo) {
+        meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
     }
     val imdbRating = if (hideImdbRating) null else meta.imdbRating
     val shouldShowImdbRating = imdbRating != null
@@ -1012,15 +792,14 @@ private fun CombinedMetaBadge(
 }
 
 private fun normalizeCountryLabel(raw: String): String {
-    val displayLocale = Locale.getDefault()
     return raw
         .split(",")
         .joinToString(", ") { part ->
-            val code = part.trim()
-            if (code.matches(Regex("[A-Za-z]{2}"))) {
-                Locale("", code).getDisplayCountry(displayLocale).takeIf { it.isNotBlank() } ?: code
+            val trimmed = part.trim()
+            if (trimmed.matches(Regex("[A-Za-z]{2,3}"))) {
+                trimmed.uppercase()
             } else {
-                code
+                trimmed
             }
         }
 }
@@ -1116,30 +895,7 @@ private fun formatMDBListRating(provider: String, rating: Double): String {
 }
 
 private fun formatRuntime(runtime: String): String {
-    val trimmed = runtime.trim()
-    // Already in "Xh Ym" or "Xh" format
-    if (trimmed.contains('h') || trimmed.contains('m')) {
-        val hours = Regex("(\\d+)\\s*h").find(trimmed)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-        val mins = Regex("(\\d+)\\s*m").find(trimmed)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-        val total = hours * 60 + mins
-        if (total > 0) return if (total >= 60) {
-            val h = total / 60; val m = total % 60
-            if (m > 0) "${h}h ${m}m" else "${h}h"
-        } else "${total}m"
-    }
-    // "H:MM" or "HH:MM" format
-    if (trimmed.contains(':')) {
-        val parts = trimmed.split(':')
-        val hours = parts.getOrNull(0)?.toIntOrNull() ?: 0
-        val mins = parts.getOrNull(1)?.toIntOrNull() ?: 0
-        val total = hours * 60 + mins
-        if (total > 0) return if (total >= 60) {
-            val m = total % 60
-            if (m > 0) "${hours}h ${m}m" else "${hours}h"
-        } else "${total}m"
-    }
-    // Plain number (minutes)
-    val minutes = trimmed.filter { it.isDigit() }.toIntOrNull() ?: return runtime
+    val minutes = runtime.filter { it.isDigit() }.toIntOrNull() ?: return runtime
     return if (minutes >= 60) {
         val hours = minutes / 60
         val mins = minutes % 60

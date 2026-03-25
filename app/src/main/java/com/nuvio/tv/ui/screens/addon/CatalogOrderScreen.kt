@@ -61,6 +61,7 @@ fun CatalogOrderScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(NuvioColors.Background)
             .padding(horizontal = 48.dp, vertical = 24.dp)
     ) {
         LazyColumn(

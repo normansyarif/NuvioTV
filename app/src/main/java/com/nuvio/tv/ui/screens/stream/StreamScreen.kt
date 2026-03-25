@@ -66,9 +66,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import coil.request.ImageRequest
-import coil.decode.SvgDecoder
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import com.nuvio.tv.ui.util.localizeEpisodeTitle
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
@@ -169,8 +167,7 @@ fun StreamScreen(
     LaunchedEffect(uiState.autoPlayPlaybackInfo) {
         val playbackInfo = uiState.autoPlayPlaybackInfo ?: return@LaunchedEffect
         if (playbackInfo.url != null) {
-            onAutoPlayResolved(playbackInfo)
-            viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+            routeAutoPlay(playbackInfo)
         }
     }
 
@@ -188,7 +185,9 @@ fun StreamScreen(
     }
 
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NuvioColors.Background)
     ) {
         // Full screen backdrop
         StreamBackdrop(
@@ -311,10 +310,10 @@ private fun StreamBackdrop(
                 .build()
         }
     }
-    val imageAlpha by animateFloatAsState(
-        targetValue = if (isLoading) 0.7f else 0.5f,
+    val alpha by animateFloatAsState(
+        targetValue = if (isLoading) 0.3f else 0.5f,
         animationSpec = tween(500),
-        label = "backdrop_image_alpha"
+        label = "backdrop_alpha"
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -323,12 +322,17 @@ private fun StreamBackdrop(
             AsyncImage(
                 model = backdropModel,
                 contentDescription = null,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = imageAlpha },
+                modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
         }
+
+        // Dark overlay
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(NuvioColors.Background.copy(alpha = alpha))
+        )
 
         StreamGradientLayer(
             bgColor = backgroundColor,
@@ -344,22 +348,39 @@ private fun StreamGradientLayer(
 ) {
     Box(
         modifier = modifier
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
             .drawWithCache {
-                val combinedGradient = Brush.horizontalGradient(
+                val leftGradient = Brush.horizontalGradient(
                     colorStops = arrayOf(
                         0.0f to bgColor,
-                        0.15f to bgColor.copy(alpha = 0.85f),
-                        0.30f to bgColor.copy(alpha = 0.40f),
-                        0.50f to bgColor.copy(alpha = 0.15f),
-                        0.70f to bgColor.copy(alpha = 0.40f),
-                        0.85f to bgColor.copy(alpha = 0.85f),
-                        1.0f to bgColor
+                        0.12f to bgColor.copy(alpha = 0.92f),
+                        0.26f to bgColor.copy(alpha = 0.78f),
+                        0.44f to bgColor.copy(alpha = 0.58f),
+                        0.62f to bgColor.copy(alpha = 0.36f),
+                        0.78f to bgColor.copy(alpha = 0.16f),
+                        0.90f to bgColor.copy(alpha = 0.05f),
+                        1.0f to Color.Transparent
                     ),
                     startX = 0f,
+                    endX = size.width * 0.65f
+                )
+                val rightGradient = Brush.horizontalGradient(
+                    colorStops = arrayOf(
+                        0.0f to Color.Transparent,
+                        0.10f to bgColor.copy(alpha = 0.05f),
+                        0.22f to bgColor.copy(alpha = 0.16f),
+                        0.38f to bgColor.copy(alpha = 0.36f),
+                        0.56f to bgColor.copy(alpha = 0.58f),
+                        0.74f to bgColor.copy(alpha = 0.78f),
+                        0.88f to bgColor.copy(alpha = 0.92f),
+                        1.0f to bgColor
+                    ),
+                    startX = size.width * 0.35f,
                     endX = size.width
                 )
                 onDrawBehind {
-                    drawRect(brush = combinedGradient)
+                    drawRect(brush = leftGradient)
+                    drawRect(brush = rightGradient)
                 }
             }
     )
@@ -380,13 +401,11 @@ private fun LeftContentSection(
 ) {
     val context = LocalContext.current
     var logoLoadFailed by remember(logo) { mutableStateOf(false) }
-    val density = LocalDensity.current
     val logoModel = remember(context, logo) {
         logo?.let { image ->
             ImageRequest.Builder(context)
                 .data(image)
                 .crossfade(false)
-                .decoderFactory(SvgDecoder.Factory())
                 .build()
         }
     }
@@ -866,7 +885,6 @@ private fun StreamCard(
             ImageRequest.Builder(context)
                 .data(logo)
                 .crossfade(false)
-                .decoderFactory(SvgDecoder.Factory())
                 .build()
         }
     }

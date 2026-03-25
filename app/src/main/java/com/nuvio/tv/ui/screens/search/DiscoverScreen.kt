@@ -66,6 +66,7 @@ fun DiscoverScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(NuvioColors.Background)
     ) {
         if (!uiState.discoverEnabled) {
             EmptyScreenState(

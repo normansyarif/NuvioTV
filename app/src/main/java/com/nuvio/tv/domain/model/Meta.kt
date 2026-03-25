@@ -64,8 +64,7 @@ data class MetaCastMember(
 @Immutable
 data class MetaCompany(
     val name: String,
-    val logo: String? = null,
-    val tmdbId: Int? = null
+    val logo: String? = null
 )
 
 @Immutable

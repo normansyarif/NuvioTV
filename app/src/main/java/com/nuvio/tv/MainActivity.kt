@@ -114,7 +114,6 @@ import com.nuvio.tv.data.repository.TraktProgressService
 import com.nuvio.tv.domain.model.AppFont
 import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.domain.model.AuthState
-import com.nuvio.tv.core.sync.ProfileSettingsSyncService
 import com.nuvio.tv.core.sync.ProfileSyncService
 import com.nuvio.tv.core.sync.StartupSyncService
 import com.nuvio.tv.data.remote.supabase.AvatarRepository
@@ -181,9 +180,6 @@ class MainActivity : ComponentActivity() {
     lateinit var startupSyncService: StartupSyncService
 
     @Inject
-    lateinit var profileSettingsSyncService: ProfileSettingsSyncService
-
-    @Inject
     lateinit var profileSyncService: ProfileSyncService
 
     @Inject
@@ -223,11 +219,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-<<<<<<< HEAD
         queueExternalRoute(intent)
-=======
-        window?.setBackgroundDrawable(null)
->>>>>>> 1b32045b5955603123183ef7da9f2054aedc5764
         setContent {
             var hasSelectedProfileThisSession by remember { mutableStateOf(false) }
             var onboardingCompletedThisSession by remember { mutableStateOf(false) }
@@ -249,21 +241,6 @@ class MainActivity : ComponentActivity() {
             val profiles by profileManager.profiles.collectAsState()
             val activeProfile = remember(activeProfileId, profiles) {
                 profiles.firstOrNull { it.id == activeProfileId }
-            }
-            var profilePinStates by remember { mutableStateOf<Map<Int, Boolean>>(emptyMap()) }
-
-            LaunchedEffect(authState, profiles) {
-                if (authState is AuthState.FullAccount) {
-                    profileSyncService.pullProfileLockStates()
-                        .onSuccess { profilePinStates = it }
-                        .onFailure { profilePinStates = emptyMap() }
-                } else {
-                    profilePinStates = emptyMap()
-                }
-            }
-
-            val activeProfileHasPin = remember(activeProfileId, profilePinStates) {
-                profilePinStates[activeProfileId] == true
             }
             var avatarCatalog by remember { mutableStateOf(emptyList<com.nuvio.tv.data.remote.supabase.AvatarCatalogItem>()) }
 
@@ -364,7 +341,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     val shouldShowProfileSelection =
-                        !hasSelectedProfileThisSession && (profiles.size > 1 || activeProfileHasPin)
+                        !hasSelectedProfileThisSession && profiles.size > 1
 
                     if (shouldShowProfileSelection) {
                         ProfileSelectionScreen(
@@ -568,7 +545,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (::jankStats.isInitialized) jankStats.isTrackingEnabled = true
-        startupSyncService.requestSyncNow(includeProfileSettings = false)
+        startupSyncService.requestSyncNow()
         lifecycleScope.launch {
             traktProgressService.refreshNow()
         }
@@ -581,7 +558,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        profileSettingsSyncService.requestForegroundPull()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -718,6 +694,7 @@ private fun LegacySidebarScaffold(
                                     modifier = Modifier
                                         .width(itemWidth)
                                         .height(52.dp)
+                                        .clip(profileItemShape)
                                         .background(color = profileBgColor, shape = profileItemShape)
                                         .onFocusChanged { isProfileFocused = it.isFocused }
                                         .clickable {
@@ -880,6 +857,7 @@ private fun LegacySidebarButton(
         modifier = modifier
             .height(52.dp)
             .focusProperties { canFocus = expanded }
+            .clip(itemShape)
             .background(color = backgroundColor, shape = itemShape)
             .onFocusChanged { isFocused = it.isFocused }
             .clickable(onClick = onClick),
@@ -1136,6 +1114,13 @@ private fun ModernSidebarScaffold(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .then(
+                    if (shouldApplySidebarHaze) {
+                        Modifier.haze(sidebarHazeState)
+                    } else {
+                        Modifier
+                    }
+                )
                 .onPreviewKeyEvent { keyEvent ->
                     if (
                         isSidebarExpanded &&
@@ -1361,6 +1346,7 @@ private fun CollapsedSidebarPill(
                 .graphicsLayer {
                     shape = pillShape
                     clip = true
+                    compositingStrategy = CompositingStrategy.Offscreen
                 }
                 .clip(pillShape)
                 .background(brush = pillBackgroundBrush, shape = pillShape)

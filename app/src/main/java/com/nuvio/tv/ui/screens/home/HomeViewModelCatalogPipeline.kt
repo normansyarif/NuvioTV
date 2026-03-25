@@ -14,7 +14,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
-import com.nuvio.tv.domain.model.MetaPreview
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withPermit
 import com.nuvio.tv.core.util.filterReleasedItems
@@ -117,7 +116,6 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     pendingTmdbEnrichItemId = null
     lastHeroEnrichmentSignature = null
     lastHeroEnrichedItems = emptyList()
-    heroItemOrder = emptyList()
 
     try {
         if (addons.isEmpty()) {
@@ -305,42 +303,27 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         } else {
             emptyList()
         }
-        fun stableHeroCandidates(row: CatalogRow, candidates: Collection<MetaPreview>): List<MetaPreview> {
-            return candidates.sortedWith(
-                compareBy<MetaPreview> { stableHeroSortKey(row, it) }
-                    .thenBy { it.id }
-            )
-        }
-        fun slotShuffled(rows: List<CatalogRow>, filter: (MetaPreview) -> Boolean, currentOrder: List<String>): List<MetaPreview> {
-            val totalCatalogs = rows.size.coerceAtLeast(1)
-            val baseSlot = 7 / totalCatalogs
-            val remainder = 7 % totalCatalogs
-            val result = mutableListOf<MetaPreview>()
-            rows.forEachIndexed { index, row ->
-                val slot = baseSlot + if (index < remainder) 1 else 0
-                val existing = currentOrder.filter { id -> row.items.any { it.id == id } }
-                val byId = row.items.filter(filter).associateBy { it.id }
-                val ordered = existing.mapNotNull { byId[it] }
-                val new = stableHeroCandidates(
-                    row = row,
-                    candidates = byId.values.filter { it.id !in existing }
-                )
-                result += (ordered + new).take(slot)
-            }
-            return result
-        }
+        val heroItemsFromSelectedCatalogs = selectedHeroRows
+            .asSequence()
+            .flatMap { row -> row.items.asSequence() }
+            .filter { item -> item.hasHeroArtwork() }
+            .shuffled()
+            .take(7)
+            .toList()
+        val fallbackHeroItemsFromSelectedCatalogs = selectedHeroRows
+            .asSequence()
+            .flatMap { row -> row.items.asSequence() }
+            .shuffled()
+            .take(7)
+            .toList()
 
-        val currentHeroOrder = heroItemOrder
-
-        val heroItemsFromSelectedCatalogs = slotShuffled(
-            selectedHeroRows, { it.hasHeroArtwork() }, currentHeroOrder
-        )
-        val fallbackHeroItemsFromSelectedCatalogs = slotShuffled(
-            selectedHeroRows, { true }, currentHeroOrder
-        )
-        val fallbackHeroItemsWithArtwork = slotShuffled(
-            orderedRows, { it.hasHeroArtwork() }, currentHeroOrder
-        )
+        val fallbackHeroItemsWithArtwork = orderedRows
+            .asSequence()
+            .flatMap { it.items.asSequence() }
+            .filter { it.hasHeroArtwork() }
+            .shuffled()
+            .take(7)
+            .toList()
 
         val computedHeroItems = when {
             heroItemsFromSelectedCatalogs.isNotEmpty() -> heroItemsFromSelectedCatalogs
@@ -372,20 +355,6 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         }
 
         val computedGridItems = if (currentLayout == HomeLayout.GRID) {
-            val posterCardWidthDp = _uiState.value.posterCardWidthDp
-            val itemsPerRow = when (posterCardWidthDp) {
-                104 -> 7   // compact
-                112 -> 6   // dense
-                120 -> 6   // standard
-                126 -> 6   // balanced
-                134 -> 5   // comfort
-                140 -> 5   // large
-                else -> 6
-            }
-            val rowCount = if (posterCardWidthDp <= 104) 2 else 3
-            val seeAllThreshold = itemsPerRow * rowCount + 2
-            val maxWithSeeAll = itemsPerRow * rowCount - 1
-            val maxWithoutSeeAll = itemsPerRow * rowCount
             buildList {
                 if (heroSectionEnabled && computedHeroItems.isNotEmpty()) {
                     add(GridItem.Hero(computedHeroItems))
@@ -400,8 +369,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
                             type = row.apiType
                         )
                     )
-                    val hasEnoughForSeeAll = row.items.size >= seeAllThreshold
-                    val displayItems = if (hasEnoughForSeeAll) row.items.take(maxWithSeeAll) else row.items.take(maxWithoutSeeAll)
+                    val hasEnoughForSeeAll = row.items.size >= 15
+                    val displayItems = if (hasEnoughForSeeAll) row.items.take(14) else row.items.take(15)
                     displayItems.forEach { item ->
                         add(
                             GridItem.Content(
@@ -440,8 +409,6 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         baseGridItems
     }
 
-    heroItemOrder = baseHeroItems.map { it.id }
-
     _uiState.update { state ->
         state.copy(
             catalogRows = if (state.catalogRows == displayRows) state.catalogRows else displayRows,
@@ -452,9 +419,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     }
 
     val tmdbSettings = currentTmdbSettings
-    val tmdbEnabledForCurrentLayout = tmdbSettings.enabled &&
-        (currentLayout != HomeLayout.MODERN || tmdbSettings.modernHomeEnabled)
-    val shouldUseEnrichedHeroItems = tmdbEnabledForCurrentLayout &&
+    val shouldUseEnrichedHeroItems = tmdbSettings.enabled &&
         (tmdbSettings.useArtwork || tmdbSettings.useBasicInfo || tmdbSettings.useDetails)
 
     if (shouldUseEnrichedHeroItems && baseHeroItems.isNotEmpty()) {
@@ -490,17 +455,9 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     } else {
         lastHeroEnrichmentSignature = null
         lastHeroEnrichedItems = emptyList()
-        heroItemOrder = emptyList()
     }
 
     schedulePosterStatusReconcilePipeline(displayRows)
-}
-
-private fun stableHeroSortKey(
-    row: CatalogRow,
-    item: MetaPreview
-): Int {
-    return "${row.addonId}|${row.apiType}|${row.catalogId}|${item.id}".hashCode()
 }
 
 internal fun HomeViewModel.schedulePosterStatusReconcilePipeline(rows: List<CatalogRow>) {

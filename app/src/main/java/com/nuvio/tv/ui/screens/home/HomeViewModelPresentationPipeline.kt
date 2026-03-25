@@ -30,8 +30,7 @@ private data class CoreLayoutPrefs(
     val posterLabelsEnabled: Boolean,
     val catalogAddonNameEnabled: Boolean,
     val catalogTypeSuffixEnabled: Boolean,
-    val hideUnreleasedContent: Boolean,
-    val showFullReleaseDate: Boolean
+    val hideUnreleasedContent: Boolean
 )
 
 private data class FocusedBackdropPrefs(
@@ -50,9 +49,7 @@ private data class LayoutUiPrefs(
     val catalogAddonNameEnabled: Boolean,
     val catalogTypeSuffixEnabled: Boolean,
     val hideUnreleasedContent: Boolean,
-    val showFullReleaseDate: Boolean,
     val modernLandscapePostersEnabled: Boolean,
-    val modernHeroFullScreenBackdropEnabled: Boolean,
     val focusedBackdropExpandEnabled: Boolean,
     val focusedBackdropExpandDelaySeconds: Int,
     val focusedBackdropTrailerEnabled: Boolean,
@@ -80,18 +77,15 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
                 posterLabelsEnabled = posterLabelsEnabled,
                 catalogAddonNameEnabled = catalogAddonNameEnabled,
                 catalogTypeSuffixEnabled = true,
-                hideUnreleasedContent = false,
-                showFullReleaseDate = true
+                hideUnreleasedContent = false
             )
         },
         layoutPreferenceDataStore.catalogTypeSuffixEnabled,
-        layoutPreferenceDataStore.hideUnreleasedContent,
-        layoutPreferenceDataStore.showFullReleaseDate
-    ) { corePrefs, catalogTypeSuffixEnabled, hideUnreleasedContent, showFullReleaseDate ->
+        layoutPreferenceDataStore.hideUnreleasedContent
+    ) { corePrefs, catalogTypeSuffixEnabled, hideUnreleasedContent ->
         corePrefs.copy(
             catalogTypeSuffixEnabled = catalogTypeSuffixEnabled,
-            hideUnreleasedContent = hideUnreleasedContent,
-            showFullReleaseDate = showFullReleaseDate
+            hideUnreleasedContent = hideUnreleasedContent
         )
     }
 
@@ -111,12 +105,7 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
         )
     }
 
-    val modernLayoutPrefsFlow = combine(
-        layoutPreferenceDataStore.modernLandscapePostersEnabled,
-        layoutPreferenceDataStore.modernHeroFullScreenBackdropEnabled
-    ) { landscapePosters, fullScreenBackdrop ->
-        landscapePosters to fullScreenBackdrop
-    }
+    val modernLayoutPrefsFlow = layoutPreferenceDataStore.modernLandscapePostersEnabled
 
     val baseLayoutUiPrefsFlow = combine(
         coreLayoutPrefsFlow,
@@ -133,9 +122,7 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
             catalogAddonNameEnabled = corePrefs.catalogAddonNameEnabled,
             catalogTypeSuffixEnabled = corePrefs.catalogTypeSuffixEnabled,
             hideUnreleasedContent = corePrefs.hideUnreleasedContent,
-            showFullReleaseDate = corePrefs.showFullReleaseDate,
             modernLandscapePostersEnabled = false,
-            modernHeroFullScreenBackdropEnabled = false,
             focusedBackdropExpandEnabled = focusedBackdropPrefs.expandEnabled,
             focusedBackdropExpandDelaySeconds = focusedBackdropPrefs.expandDelaySeconds,
             focusedBackdropTrailerEnabled = focusedBackdropPrefs.trailerEnabled,
@@ -153,8 +140,7 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
             modernLayoutPrefsFlow
         ) { basePrefs, modernPrefs ->
             basePrefs.copy(
-                modernLandscapePostersEnabled = modernPrefs.first,
-                modernHeroFullScreenBackdropEnabled = modernPrefs.second
+                modernLandscapePostersEnabled = modernPrefs
             )
         }
             .distinctUntilChanged()
@@ -170,8 +156,7 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
                     currentHeroCatalogKeys != prefs.heroCatalogKeys ||
                         previousState.heroSectionEnabled != prefs.heroSectionEnabled ||
                         previousState.homeLayout != prefs.layout ||
-                        previousState.hideUnreleasedContent != prefs.hideUnreleasedContent ||
-                        previousState.posterCardWidthDp != prefs.posterCardWidthDp
+                        previousState.hideUnreleasedContent != prefs.hideUnreleasedContent
                 currentHeroCatalogKeys = prefs.heroCatalogKeys
                 _uiState.update {
                     it.copy(
@@ -182,9 +167,7 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
                         catalogAddonNameEnabled = prefs.catalogAddonNameEnabled,
                         catalogTypeSuffixEnabled = prefs.catalogTypeSuffixEnabled,
                         hideUnreleasedContent = prefs.hideUnreleasedContent,
-                        showFullReleaseDate = prefs.showFullReleaseDate,
                         modernLandscapePostersEnabled = prefs.modernLandscapePostersEnabled,
-                        modernHeroFullScreenBackdropEnabled = prefs.modernHeroFullScreenBackdropEnabled,
                         focusedPosterBackdropExpandEnabled = prefs.focusedBackdropExpandEnabled,
                         focusedPosterBackdropExpandDelaySeconds = prefs.focusedBackdropExpandDelaySeconds,
                         focusedPosterBackdropTrailerEnabled = prefs.focusedBackdropTrailerEnabled,
@@ -317,9 +300,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
         setEnrichingItemId(null)
     }
 
-    val tmdbEnabledForCurrentLayout = currentTmdbSettings.enabled &&
-        (_uiState.value.homeLayout != HomeLayout.MODERN || currentTmdbSettings.modernHomeEnabled)
-    val willEnrich = tmdbEnabledForCurrentLayout || externalMetaPrefetchEnabled
+    val willEnrich = currentTmdbSettings.enabled || externalMetaPrefetchEnabled
 
     if (willEnrich) setEnrichingItemId(item.id)
 
@@ -338,7 +319,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
 
         try {
             var tmdbEnriched = false
-            if (tmdbEnabledForCurrentLayout) {
+            if (currentTmdbSettings.enabled) {
                 val tmdbId = runCatching { tmdbService.ensureTmdbId(item.id, item.apiType) }.getOrNull()
                 val enrichment = if (tmdbId != null) runCatching {
                     tmdbMetadataService.fetchEnrichment(
@@ -383,15 +364,13 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
     pendingAdjacentPrefetchItemId = item.id
     adjacentItemPrefetchJob?.cancel()
     adjacentItemPrefetchJob = viewModelScope.launch(Dispatchers.IO) {
-        val tmdbEnabledForCurrentLayout = currentTmdbSettings.enabled &&
-            (_uiState.value.homeLayout != HomeLayout.MODERN || currentTmdbSettings.modernHomeEnabled)
         delay(HomeViewModel.EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS)
         if (pendingAdjacentPrefetchItemId != item.id) return@launch
         if (item.id in prefetchedTmdbIds || item.id in prefetchedExternalMetaIds) return@launch
 
         try {
             var tmdbEnriched = false
-            if (tmdbEnabledForCurrentLayout) {
+            if (currentTmdbSettings.enabled) {
                 val tmdbId = runCatching { tmdbService.ensureTmdbId(item.id, item.apiType) }.getOrNull()
                 val enrichment = if (tmdbId != null) runCatching {
                     tmdbMetadataService.fetchEnrichment(
@@ -438,13 +417,11 @@ private fun HomeViewModel.updateCatalogItemWithTmdb(itemId: String, enrichment: 
             merged = merged.copy(
                 name = enrichment.localizedTitle ?: merged.name,
                 description = enrichment.description ?: merged.description,
-                genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else merged.genres,
-                imdbRating = enrichment.rating?.toFloat() ?: merged.imdbRating
+                genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else merged.genres
             )
         }
         if (currentTmdbSettings.useArtwork) {
             merged = merged.copy(
-                background = enrichment.backdrop ?: merged.background,
                 logo = enrichment.logo ?: merged.logo
             )
         }

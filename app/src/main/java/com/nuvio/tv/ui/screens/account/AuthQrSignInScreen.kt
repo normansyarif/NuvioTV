@@ -119,6 +119,7 @@ fun AuthQrSignInScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(NuvioColors.Background)
     ) {
         Row(
             modifier = Modifier

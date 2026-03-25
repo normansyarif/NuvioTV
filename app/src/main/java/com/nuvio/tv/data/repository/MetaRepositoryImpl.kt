@@ -13,11 +13,6 @@ import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.R
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -47,18 +42,11 @@ class MetaRepositoryImpl @Inject constructor(
         val detail: String
     )
 
-    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
     // In-memory cache: "type:id" -> Meta
     private val metaCache = ConcurrentHashMap<String, Meta>()
     // Separate cache for full meta fetched from addons (bypasses catalog-level cache)
     private val addonMetaCache = ConcurrentHashMap<String, Meta>()
     private val primaryAddonMetaCache = ConcurrentHashMap<String, Meta>()
-
-    // In-flight deduplication: prevents concurrent coroutines from firing duplicate requests
-    private val inFlightMeta = ConcurrentHashMap<String, Deferred<Meta?>>()
-    private val inFlightAddonMeta = ConcurrentHashMap<String, Deferred<Meta?>>()
-    private val inFlightPrimaryMeta = ConcurrentHashMap<String, Deferred<Meta?>>()
 
     override fun getMeta(
         addonBaseUrl: String,
@@ -74,29 +62,21 @@ class MetaRepositoryImpl @Inject constructor(
         emit(NetworkResult.Loading)
 
         val url = buildMetaUrl(addonBaseUrl, type, id)
-        val deferred = inFlightMeta.getOrPut(cacheKey) {
-            repositoryScope.async {
-                try {
-                    when (val result = safeApiCall { api.getMeta(url) }) {
-                        is NetworkResult.Success -> {
-                            val metaDto = result.data.meta ?: return@async null
-                            val meta = metaDto.toDomain(context.getString(R.string.episodes_episode))
-                            metaCache[cacheKey] = meta
-                            meta
-                        }
-                        else -> null
-                    }
-                } finally {
-                    inFlightMeta.remove(cacheKey)
+
+        when (val result = safeApiCall { api.getMeta(url) }) {
+            is NetworkResult.Success -> {
+                val metaDto = result.data.meta
+                if (metaDto != null) {
+                    val episodeLabel = context.getString(R.string.episodes_episode)
+                    val meta = metaDto.toDomain(episodeLabel)
+                    metaCache[cacheKey] = meta
+                    emit(NetworkResult.Success(meta))
+                } else {
+                    emit(NetworkResult.Error(context.getString(R.string.error_meta_not_found)))
                 }
             }
-        }
-
-        val meta = deferred.await()
-        if (meta != null) {
-            emit(NetworkResult.Success(meta))
-        } else {
-            emit(NetworkResult.Error(context.getString(R.string.error_meta_not_found)))
+            is NetworkResult.Error -> emit(result)
+            NetworkResult.Loading -> { /* Already emitted */ }
         }
     }
 
@@ -151,8 +131,7 @@ class MetaRepositoryImpl @Inject constructor(
         if (prioritizedCandidates.isEmpty()) {
             // Last resort: try addons that declare the raw type (legacy behavior).
             val fallbackAddons = addons.filter { addon ->
-                addon.rawTypes.any { it.equals(requestedType, ignoreCase = true) } &&
-                    addon.resources.any { it.name == "meta" }
+                addon.rawTypes.any { it.equals(requestedType, ignoreCase = true) }
             }
 
             for (addon in fallbackAddons) {
@@ -193,49 +172,56 @@ class MetaRepositoryImpl @Inject constructor(
             return@flow
         }
 
-        val deferred = inFlightAddonMeta.getOrPut(cacheKey) {
-            repositoryScope.async {
-                try {
-                    for ((addon, candidateType) in prioritizedCandidates) {
-                        val url = buildMetaUrl(addon.baseUrl, candidateType, id)
-                        Log.d(TAG, "Trying meta addonId=${addon.id} addonName=${addon.name} type=$candidateType id=$id url=$url")
-                        when (val result = safeApiCall { api.getMeta(url) }) {
-                            is NetworkResult.Success -> {
-                                val metaDto = result.data.meta
-                                if (metaDto != null) {
-                                    val meta = metaDto.toDomain(context.getString(R.string.episodes_episode))
-                                    addonMetaCache[cacheKey] = meta
-                                    metaCache[cacheKey] = meta
-                                    Log.d(TAG, "Meta fetch success addonId=${addon.id} type=$candidateType id=$id")
-                                    return@async meta
-                                }
-                                Log.d(TAG, "Meta response was null addonId=${addon.id} type=$candidateType id=$id")
-                            }
-                            else -> { /* try next */ }
-                        }
+        // Try each candidate until we find meta.
+        for ((addon, candidateType) in prioritizedCandidates) {
+            attemptedAddonNames += addon.displayName
+            val url = buildMetaUrl(addon.baseUrl, candidateType, id)
+            Log.d(
+                TAG,
+                "Trying meta addonId=${addon.id} addonName=${addon.name} type=$candidateType id=$id url=$url"
+            )
+            when (val result = safeApiCall { api.getMeta(url) }) {
+                is NetworkResult.Success -> {
+                    val metaDto = result.data.meta
+                    if (metaDto != null) {
+                        val episodeLabel = context.getString(R.string.episodes_episode)
+                        val meta = metaDto.toDomain(episodeLabel)
+                        addonMetaCache[cacheKey] = meta
+                        metaCache[cacheKey] = meta
+                        Log.d(
+                            TAG,
+                            "Meta fetch success addonId=${addon.id} type=$candidateType id=$id"
+                        )
+                        emit(NetworkResult.Success(meta))
+                        return@flow
                     }
-                    null
-                } finally {
-                    inFlightAddonMeta.remove(cacheKey)
+                    Log.d(
+                        TAG,
+                        "Meta response was null addonId=${addon.id} type=$candidateType id=$id"
+                    )
+                    attemptedFailures += buildMissingMetaFailure(addon)
                 }
+                is NetworkResult.Error -> {
+                    Log.w(
+                        TAG,
+                        "Meta fetch failed addonId=${addon.id} type=$candidateType id=$id code=${result.code} message=${result.message}"
+                    )
+                    attemptedFailures += buildAddonFailure(addon, result)
+                }
+                NetworkResult.Loading -> { /* no-op */ }
             }
         }
 
-        val meta = deferred.await()
-        if (meta != null) {
-            emit(NetworkResult.Success(meta))
-        } else {
-            emit(
-                NetworkResult.Error(
-                    buildAggregateFailureMessage(
-                        type = requestedType,
-                        id = id,
-                        attemptedAddonNames = attemptedAddonNames.toList(),
-                        failures = attemptedFailures
-                    )
+        emit(
+            NetworkResult.Error(
+                buildAggregateFailureMessage(
+                    type = requestedType,
+                    id = id,
+                    attemptedAddonNames = attemptedAddonNames.toList(),
+                    failures = attemptedFailures
                 )
             )
-        }
+        )
     }
 
     override fun getMetaFromPrimaryAddon(
@@ -271,35 +257,33 @@ class MetaRepositoryImpl @Inject constructor(
             "Trying primary meta addonId=${addon.id} addonName=${addon.name} type=$candidateType id=$id url=$url"
         )
 
-        val deferred = inFlightPrimaryMeta.getOrPut(cacheKey) {
-            repositoryScope.async {
-                try {
-                    when (val result = safeApiCall { api.getMeta(url) }) {
-                        is NetworkResult.Success -> {
-                            val metaDto = result.data.meta ?: return@async null
-                            val meta = metaDto.toDomain(context.getString(R.string.episodes_episode))
-                            primaryAddonMetaCache[cacheKey] = meta
-                            metaCache[cacheKey] = meta
-                            meta
-                        }
-                        else -> null
-                    }
-                } finally {
-                    inFlightPrimaryMeta.remove(cacheKey)
+        when (val result = safeApiCall { api.getMeta(url) }) {
+            is NetworkResult.Success -> {
+                val metaDto = result.data.meta
+                if (metaDto != null) {
+                    val episodeLabel = context.getString(R.string.episodes_episode)
+                    val meta = metaDto.toDomain(episodeLabel)
+                    primaryAddonMetaCache[cacheKey] = meta
+                    metaCache[cacheKey] = meta
+                    emit(NetworkResult.Success(meta))
+                } else {
+                    emit(NetworkResult.Error(buildAggregateFailureMessage(
+                        type = requestedType,
+                        id = id,
+                        attemptedAddonNames = listOf(addon.displayName),
+                        failures = listOf(buildMissingMetaFailure(addon))
+                    )))
                 }
             }
-        }
-
-        val meta = deferred.await()
-        if (meta != null) {
-            emit(NetworkResult.Success(meta))
-        } else {
-            emit(NetworkResult.Error(buildAggregateFailureMessage(
-                type = requestedType,
-                id = id,
-                attemptedAddonNames = listOf(addon.displayName),
-                failures = listOf(buildMissingMetaFailure(addon))
-            )))
+            is NetworkResult.Error -> {
+                emit(NetworkResult.Error(buildAggregateFailureMessage(
+                    type = requestedType,
+                    id = id,
+                    attemptedAddonNames = listOf(addon.displayName),
+                    failures = listOf(buildAddonFailure(addon, result))
+                )))
+            }
+            NetworkResult.Loading -> Unit
         }
     }
 
@@ -438,8 +422,5 @@ class MetaRepositoryImpl @Inject constructor(
         metaCache.clear()
         addonMetaCache.clear()
         primaryAddonMetaCache.clear()
-        inFlightMeta.clear()
-        inFlightAddonMeta.clear()
-        inFlightPrimaryMeta.clear()
     }
 }

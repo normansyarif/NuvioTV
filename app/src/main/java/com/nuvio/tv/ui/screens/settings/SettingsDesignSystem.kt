@@ -75,6 +75,7 @@ internal fun SettingsStandaloneScaffold(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(NuvioColors.Background)
             .padding(horizontal = 32.dp, vertical = 24.dp)
     ) {
         SettingsWorkspaceSurface(
