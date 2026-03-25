@@ -11,10 +11,17 @@ import com.nuvio.tv.core.tmdb.TmdbMetadataService
 import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
+import com.nuvio.tv.data.local.TraktAuthDataStore
+import com.nuvio.tv.data.local.TraktSettingsDataStore
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import com.nuvio.tv.data.repository.ImdbEpisodeRatingsRepository
 import com.nuvio.tv.data.repository.MDBListRepository
+<<<<<<< HEAD
 import com.nuvio.tv.data.repository.RemoteEpisodeWatchedRepository
+import com.nuvio.tv.data.repository.RemoteTitleRatingRepository
+=======
+import com.nuvio.tv.data.repository.TraktCommentsService
+>>>>>>> 1b32045b5955603123183ef7da9f2054aedc5764
 import com.nuvio.tv.data.repository.parseContentIds
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.LibraryEntryInput
@@ -23,6 +30,7 @@ import com.nuvio.tv.domain.model.ListMembershipChanges
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.NextToWatch
 import com.nuvio.tv.domain.model.TmdbSettings
+import com.nuvio.tv.domain.model.TraktCommentReview
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.LibraryRepository
@@ -43,6 +51,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -67,10 +76,14 @@ class MetaDetailsViewModel @Inject constructor(
     private val imdbEpisodeRatingsRepository: ImdbEpisodeRatingsRepository,
     private val mdbListRepository: MDBListRepository,
     private val remoteEpisodeWatchedRepository: RemoteEpisodeWatchedRepository,
+    private val remoteTitleRatingRepository: RemoteTitleRatingRepository,
     private val libraryRepository: LibraryRepository,
     private val watchProgressRepository: WatchProgressRepository,
     private val trailerService: TrailerService,
     private val trailerSettingsDataStore: TrailerSettingsDataStore,
+    private val traktAuthDataStore: TraktAuthDataStore,
+    private val traktCommentsService: TraktCommentsService,
+    private val traktSettingsDataStore: TraktSettingsDataStore,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     savedStateHandle: SavedStateHandle
@@ -91,7 +104,12 @@ class MetaDetailsViewModel @Inject constructor(
     private var collectionJob: Job? = null
     private var episodeRatingsJob: Job? = null
     private var nextToWatchJob: Job? = null
+<<<<<<< HEAD
     private var remoteWatchedStatusJob: Job? = null
+    private var titleRatingJob: Job? = null
+=======
+    private var commentsJob: Job? = null
+>>>>>>> 1b32045b5955603123183ef7da9f2054aedc5764
 
     private var trailerDelayMs = 7000L
     private var trailerAutoplayEnabled = false
@@ -99,14 +117,18 @@ class MetaDetailsViewModel @Inject constructor(
 
     private var isPlayButtonFocused = false
     private var hideUnreleasedContent = false
+    private var traktCommentsEnabled = false
+    private var traktAuthenticated = false
 
     init {
         observeMetaViewSettings()
         observeTrailerAutoplaySettings()
+        observeTraktCommentsAvailability()
         observeLibraryState()
         observeWatchProgress()
         observeMovieWatched()
         observeBlurUnwatchedEpisodes()
+        observeShowFullReleaseDate()
         observeHideUnreleasedContent()
         loadMeta()
     }
@@ -132,6 +154,47 @@ class MetaDetailsViewModel @Inject constructor(
                         } else {
                             state.copy(trailerButtonEnabled = enabled)
                         }
+                    }
+                }
+        }
+    }
+
+    private fun observeTraktCommentsAvailability() {
+        viewModelScope.launch {
+            combine(
+                traktSettingsDataStore.showMetaComments,
+                traktAuthDataStore.isAuthenticated
+            ) { enabled, authenticated ->
+                enabled to authenticated
+            }
+                .distinctUntilChanged()
+                .collectLatest { (enabled, authenticated) ->
+                    traktCommentsEnabled = enabled
+                    traktAuthenticated = authenticated
+
+                    val meta = _uiState.value.meta
+                    val shouldShow = enabled && authenticated && supportsComments(meta)
+                    if (!shouldShow) {
+                        commentsJob?.cancel()
+                    }
+
+                    _uiState.update { state ->
+                        if (shouldShow) {
+                            if (state.shouldShowCommentsSection) state else state.copy(
+                                shouldShowCommentsSection = true
+                            )
+                        } else {
+                            state.copy(
+                                comments = emptyList(),
+                                isCommentsLoading = false,
+                                commentsError = null,
+                                shouldShowCommentsSection = false
+                            )
+                        }
+                    }
+
+                    if (shouldShow && meta != null) {
+                        loadComments(meta)
                     }
                 }
         }
@@ -198,6 +261,9 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnPlayClick -> { /* Start playback */ }
             MetaDetailsEvent.OnToggleLibrary -> toggleLibrary()
             MetaDetailsEvent.OnRetry -> loadMeta()
+            MetaDetailsEvent.OnRetryComments -> _uiState.value.meta?.let { loadComments(it, forceRefresh = true) }
+            is MetaDetailsEvent.OnCommentSelected -> openCommentOverlay(event.review)
+            MetaDetailsEvent.OnDismissCommentOverlay -> dismissCommentOverlay()
             MetaDetailsEvent.OnBackPress -> { /* Handle in screen */ }
             MetaDetailsEvent.OnUserInteraction -> handleUserInteraction()
             MetaDetailsEvent.OnPlayButtonFocused -> handlePlayButtonFocused()
@@ -213,6 +279,7 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnPickerSave -> savePickerMembership()
             MetaDetailsEvent.OnPickerDismiss -> dismissListPicker()
             MetaDetailsEvent.OnClearMessage -> clearMessage()
+            MetaDetailsEvent.OnLifecyclePause -> handleLifecyclePause()
         }
     }
 
@@ -326,12 +393,28 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
+    private fun observeShowFullReleaseDate() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.showFullReleaseDate
+                .distinctUntilChanged()
+                .collectLatest { enabled ->
+                _uiState.update { state ->
+                    if (state.showFullReleaseDate == enabled) state else state.copy(showFullReleaseDate = enabled)
+                }
+            }
+        }
+    }
+
     private fun loadMeta() {
         viewModelScope.launch {
+            commentsJob?.cancel()
             _uiState.update {
                 it.copy(
                     isLoading = true,
                     error = null,
+                    titleRating = null,
+                    isTitleRatingLoading = false,
+                    isTitleRatingUpdating = false,
                     watchedEpisodes = emptySet(),
                     isEpisodeWatchedStatusLoading = false,
                     episodeWatchedPendingKeys = emptySet(),
@@ -342,7 +425,12 @@ class MetaDetailsViewModel @Inject constructor(
                     showMdbListImdb = false,
                     moreLikeThis = emptyList(),
                     collection = emptyList(),
-                    collectionName = null
+                    collectionName = null,
+                    comments = emptyList(),
+                    isCommentsLoading = false,
+                    commentsError = null,
+                    shouldShowCommentsSection = false,
+                    selectedComment = null
                 )
             }
 
@@ -443,16 +531,130 @@ class MetaDetailsViewModel @Inject constructor(
                 seasons = seasons,
                 selectedSeason = selectedSeason,
                 episodesForSeason = episodesForSeason,
-                error = null
+                error = null,
+                shouldShowCommentsSection = traktCommentsEnabled && traktAuthenticated && supportsComments(meta)
             )
         }
-        
+
         // Calculate next to watch after meta is loaded
         calculateNextToWatch()
         refreshEpisodeWatchedStatuses()
+        refreshTitleRating()
 
         // Start fetching trailer after meta is loaded
         fetchTrailerUrl()
+
+        if (traktCommentsEnabled && traktAuthenticated && supportsComments(meta)) {
+            loadComments(meta)
+        }
+    }
+
+    fun refreshTitleRating() {
+        val meta = _uiState.value.meta ?: return
+
+        titleRatingJob?.cancel()
+        titleRatingJob = viewModelScope.launch {
+            val currentJob = currentCoroutineContext()[Job]
+            _uiState.update { state ->
+                if (state.isTitleRatingLoading) state else state.copy(isTitleRatingLoading = true)
+            }
+
+            val request = resolveTitleRatingRequest(meta)
+            if (request == null) {
+                if (titleRatingJob == currentJob) {
+                    _uiState.update { state ->
+                        state.copy(isTitleRatingLoading = false)
+                    }
+                }
+                return@launch
+            }
+
+            val (tmdbId, mediaType) = request
+            val result = remoteTitleRatingRepository.fetchRating(tmdbId, mediaType)
+            result.onSuccess { remoteRating ->
+                _uiState.update { state ->
+                    if (state.meta?.id != meta.id) {
+                        state
+                    } else {
+                        state.copy(titleRating = remoteRating.rating)
+                    }
+                }
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to refresh title rating for tmdb=$tmdbId mediaType=$mediaType: ${error.message}")
+            }
+
+            if (titleRatingJob == currentJob) {
+                _uiState.update { state ->
+                    state.copy(isTitleRatingLoading = false)
+                }
+            }
+        }
+    }
+
+    fun updateTitleRating(rating: Int) {
+        val meta = _uiState.value.meta ?: return
+        if (_uiState.value.isTitleRatingUpdating) return
+
+        viewModelScope.launch {
+            val request = resolveTitleRatingRequest(meta)
+            if (request == null) {
+                toastError("Unable to resolve TMDB ID for rating")
+                return@launch
+            }
+
+            val (tmdbId, mediaType) = request
+            _uiState.update { state ->
+                state.copy(isTitleRatingUpdating = true)
+            }
+
+            val result = remoteTitleRatingRepository.setRating(tmdbId, mediaType, rating)
+            result.onSuccess { remoteRating ->
+                _uiState.update { state ->
+                    state.copy(
+                        titleRating = remoteRating.rating,
+                        isTitleRatingUpdating = false
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update { state ->
+                    state.copy(isTitleRatingUpdating = false)
+                }
+                toastError(error.message ?: "Failed to update rating")
+            }
+        }
+    }
+
+    fun removeTitleRating() {
+        val meta = _uiState.value.meta ?: return
+        if (_uiState.value.isTitleRatingUpdating) return
+
+        viewModelScope.launch {
+            val request = resolveTitleRatingRequest(meta)
+            if (request == null) {
+                toastError("Unable to resolve TMDB ID for rating")
+                return@launch
+            }
+
+            val (tmdbId, mediaType) = request
+            _uiState.update { state ->
+                state.copy(isTitleRatingUpdating = true)
+            }
+
+            val result = remoteTitleRatingRepository.removeRating(tmdbId, mediaType)
+            result.onSuccess { remoteRating ->
+                _uiState.update { state ->
+                    state.copy(
+                        titleRating = remoteRating.rating,
+                        isTitleRatingUpdating = false
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update { state ->
+                    state.copy(isTitleRatingUpdating = false)
+                }
+                toastError(error.message ?: "Failed to remove rating")
+            }
+        }
     }
 
     fun refreshEpisodeWatchedStatuses() {
@@ -522,6 +724,97 @@ class MetaDetailsViewModel @Inject constructor(
         // Episode ratings and MDBList are independent — launch both without waiting.
         loadEpisodeRatingsAsync(enriched)
         viewModelScope.launch { loadMDBListRatings(enriched) }
+    }
+
+    private fun loadComments(meta: Meta, forceRefresh: Boolean = false) {
+        if (!traktCommentsEnabled || !traktAuthenticated || !supportsComments(meta)) {
+            commentsJob?.cancel()
+            _uiState.update { state ->
+                state.copy(
+                    comments = emptyList(),
+                    isCommentsLoading = false,
+                    commentsError = null,
+                    shouldShowCommentsSection = false,
+                    selectedComment = null
+                )
+            }
+            return
+        }
+
+        commentsJob?.cancel()
+        commentsJob = viewModelScope.launch {
+            _uiState.update { state ->
+                if (state.meta == null || state.meta.id != meta.id) {
+                    state
+                } else {
+                    state.copy(
+                        comments = if (forceRefresh) emptyList() else state.comments,
+                        isCommentsLoading = true,
+                        commentsError = null,
+                        shouldShowCommentsSection = true
+                    )
+                }
+            }
+
+            try {
+                val comments = traktCommentsService.getBestReviews(
+                    meta = meta,
+                    fallbackItemId = itemId,
+                    fallbackItemType = itemType,
+                    forceRefresh = forceRefresh
+                )
+
+                _uiState.update { state ->
+                    if (state.meta == null || state.meta.id != meta.id) {
+                        state
+                    } else {
+                        state.copy(
+                            comments = comments,
+                            isCommentsLoading = false,
+                            commentsError = null,
+                            shouldShowCommentsSection = true
+                        )
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(TAG, "Failed to load Trakt comments for ${meta.id}: ${error.message}")
+                _uiState.update { state ->
+                    if (state.meta == null || state.meta.id != meta.id) {
+                        state
+                    } else {
+                        state.copy(
+                            comments = emptyList(),
+                            isCommentsLoading = false,
+                            commentsError = context.getString(R.string.detail_comments_error),
+                            shouldShowCommentsSection = true
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun supportsComments(meta: Meta?): Boolean {
+        if (meta == null) return false
+        return when (meta.type) {
+            ContentType.MOVIE -> true
+            ContentType.SERIES, ContentType.TV -> true
+            else -> meta.apiType in listOf("movie", "series", "tv", "show")
+        }
+    }
+
+    private fun openCommentOverlay(review: TraktCommentReview) {
+        _uiState.update { state ->
+            state.copy(selectedComment = review)
+        }
+    }
+
+    private fun dismissCommentOverlay() {
+        _uiState.update { state ->
+            state.copy(selectedComment = null)
+        }
     }
 
     private fun loadMoreLikeThisAsync(meta: Meta) {
@@ -1396,6 +1689,17 @@ class MetaDetailsViewModel @Inject constructor(
             ?: tmdbService.ensureTmdbId(itemId, itemType)
     }
 
+    private suspend fun resolveTitleRatingRequest(meta: Meta): Pair<String, String>? {
+        val mediaType = when (resolveTmdbContentType(meta)) {
+            ContentType.MOVIE -> "movie"
+            else -> "tv"
+        }
+        val tmdbId = tmdbService.ensureTmdbId(meta.id, mediaType)
+            ?: tmdbService.ensureTmdbId(itemId, itemType)
+            ?: return null
+        return tmdbId to mediaType
+    }
+
     private fun isSeriesMeta(meta: Meta): Boolean {
         return meta.type == ContentType.SERIES ||
             meta.type == ContentType.TV ||
@@ -1674,6 +1978,16 @@ class MetaDetailsViewModel @Inject constructor(
                 showControls = false,
                 hideLogo = false
             )
+        }
+    }
+
+    private fun handleLifecyclePause() {
+        idleTimerJob?.cancel()
+        isPlayButtonFocused = false
+        val state = _uiState.value
+        if (state.isTrailerPlaying && !state.showTrailerControls) {
+            trailerHasPlayed = true
+            setTrailerPlaybackState(isPlaying = false, showControls = false, hideLogo = false)
         }
     }
 
