@@ -205,9 +205,9 @@ class AddonRepositoryImpl @Inject constructor(
         triggerRemoteSync()
     }
 
-    suspend fun reconcileWithRemoteAddonUrls(
+    override suspend fun reconcileWithRemoteAddonUrls(
         remoteUrls: List<String>,
-        removeMissingLocal: Boolean = true
+        removeMissingLocal: Boolean
     ) {
         val normalizedRemote = remoteUrls
             .map { canonicalizeUrl(it) }

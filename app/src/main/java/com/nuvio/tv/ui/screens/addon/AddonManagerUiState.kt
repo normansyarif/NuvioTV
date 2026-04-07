@@ -5,6 +5,7 @@ import com.nuvio.tv.domain.model.Addon
 
 data class AddonManagerUiState(
     val isLoading: Boolean = false,
+    val isSyncingManagedAddons: Boolean = false,
     val isInstalling: Boolean = false,
     val installUrl: String = "",
     val installedAddons: List<Addon> = emptyList(),

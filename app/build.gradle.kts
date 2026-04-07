@@ -64,6 +64,7 @@ android {
         buildConfigField("String", "DONATIONS_BASE_URL", "\"${localProperties.getProperty("DONATIONS_BASE_URL", "")}\"")
         buildConfigField("String", "DONATIONS_DONATE_URL", "\"${localProperties.getProperty("DONATIONS_DONATE_URL", "")}\"")
         buildConfigField("String", "AVATAR_PUBLIC_BASE_URL", "\"${localProperties.getProperty("AVATAR_PUBLIC_BASE_URL", "")}\"")
+        buildConfigField("String", "ADDON_BACKEND_BASE_URL", "\"${localProperties.getProperty("ADDON_BACKEND_BASE_URL", "https://addon.syf.my.id/")}\"")
 
         // In-app updater (GitHub Releases)
         buildConfigField("String", "GITHUB_OWNER", "\"tapframe\"")
@@ -103,6 +104,7 @@ android {
             buildConfigField("String", "DONATIONS_BASE_URL", "\"${devProperties.getProperty("DONATIONS_BASE_URL", localProperties.getProperty("DONATIONS_BASE_URL", ""))}\"")
             buildConfigField("String", "DONATIONS_DONATE_URL", "\"${devProperties.getProperty("DONATIONS_DONATE_URL", localProperties.getProperty("DONATIONS_DONATE_URL", ""))}\"")
             buildConfigField("String", "AVATAR_PUBLIC_BASE_URL", "\"${devProperties.getProperty("AVATAR_PUBLIC_BASE_URL", localProperties.getProperty("AVATAR_PUBLIC_BASE_URL", ""))}\"")
+            buildConfigField("String", "ADDON_BACKEND_BASE_URL", "\"${devProperties.getProperty("ADDON_BACKEND_BASE_URL", localProperties.getProperty("ADDON_BACKEND_BASE_URL", "https://addon.syf.my.id/"))}\"")
         }
         release {
             isMinifyEnabled = true
@@ -131,6 +133,7 @@ android {
             buildConfigField("String", "DONATIONS_BASE_URL", "\"${localProperties.getProperty("DONATIONS_BASE_URL", "")}\"")
             buildConfigField("String", "DONATIONS_DONATE_URL", "\"${localProperties.getProperty("DONATIONS_DONATE_URL", "")}\"")
             buildConfigField("String", "AVATAR_PUBLIC_BASE_URL", "\"${localProperties.getProperty("AVATAR_PUBLIC_BASE_URL", "")}\"")
+            buildConfigField("String", "ADDON_BACKEND_BASE_URL", "\"${localProperties.getProperty("ADDON_BACKEND_BASE_URL", "https://addon.syf.my.id/")}\"")
         }
         create("benchmark") {
             initWith(buildTypes.getByName("release"))
