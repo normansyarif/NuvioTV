@@ -1,6 +1,7 @@
 package com.nuvio.tv.data.repository
 
 import android.util.Log
+import com.nuvio.tv.core.config.AddonBackendConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -15,16 +16,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "RemoteEpisodeWatched"
-private const val WATCHED_STATUS_BASE_URL = "https://addon.syf.my.id/stremio-watched/watched-status.php"
-private const val TMDB_MARK_URL = "https://addon.syf.my.id/stremio/tmdb_mark.php"
-private const val MARK_REFERRER_BASE_URL = "https://addon.syf.my.id/stremio-watched/mark.php"
 
 @Singleton
 class RemoteEpisodeWatchedRepository @Inject constructor(
     private val okHttpClient: OkHttpClient
 ) {
     suspend fun fetchWatchedEpisodes(tmdbId: String): Set<Pair<Int, Int>> = withContext(Dispatchers.IO) {
-        val url = WATCHED_STATUS_BASE_URL.toHttpUrl().newBuilder()
+        val url = AddonBackendConfig.watchedStatusUrl.toHttpUrl().newBuilder()
             .addQueryParameter("tmdb", tmdbId)
             .build()
         val request = Request.Builder()
@@ -57,7 +55,7 @@ class RemoteEpisodeWatchedRepository @Inject constructor(
                 .put("watched", if (watched) 1 else 0)
                 .toString()
 
-            val referrer = MARK_REFERRER_BASE_URL.toHttpUrl().newBuilder()
+            val referrer = AddonBackendConfig.markReferrerUrl.toHttpUrl().newBuilder()
                 .addQueryParameter("tmdb", tmdbId)
                 .addQueryParameter("season", season.toString())
                 .addQueryParameter("episode", episode.toString())
@@ -66,7 +64,7 @@ class RemoteEpisodeWatchedRepository @Inject constructor(
                 .build()
 
             val request = Request.Builder()
-                .url(TMDB_MARK_URL)
+                .url(AddonBackendConfig.tmdbMarkUrl)
                 .header("Accept", "*/*")
                 .header("Content-Type", "application/json")
                 .header("Referer", referrer.toString())

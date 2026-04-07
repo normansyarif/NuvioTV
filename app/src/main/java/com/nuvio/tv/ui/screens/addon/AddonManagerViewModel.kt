@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.addon
 
+import android.util.Log
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -10,12 +11,14 @@ import com.nuvio.tv.core.server.AddonConfigServer
 import com.nuvio.tv.core.server.DeviceIpAddress
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
+import com.nuvio.tv.data.repository.ManagedAddonSyncRepository
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,10 +33,14 @@ import javax.inject.Inject
 @HiltViewModel
 class AddonManagerViewModel @Inject constructor(
     private val addonRepository: AddonRepository,
+    private val managedAddonSyncRepository: ManagedAddonSyncRepository,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val profileManager: ProfileManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
+    companion object {
+        private const val TAG = "AddonManagerViewModel"
+    }
 
     private val _uiState = MutableStateFlow(AddonManagerUiState())
     val uiState: StateFlow<AddonManagerUiState> = _uiState.asStateFlow()
@@ -48,6 +55,7 @@ class AddonManagerViewModel @Inject constructor(
     private var logoBytes: ByteArray? = null
     private var homeCatalogOrderKeys: List<String> = emptyList()
     private var disabledHomeCatalogKeys: Set<String> = emptySet()
+    private var managedAddonSyncJob: Job? = null
 
     init {
         observeInstalledAddons()
@@ -68,6 +76,28 @@ class AddonManagerViewModel @Inject constructor(
 
     fun clearTransientMessage() {
         _uiState.update { it.copy(transientMessage = null, transientMessageIsError = false) }
+    }
+
+    fun syncManagedAddons() {
+        if (managedAddonSyncJob?.isActive == true) return
+
+        managedAddonSyncJob = viewModelScope.launch {
+            _uiState.update { it.copy(isSyncingManagedAddons = true) }
+            try {
+                managedAddonSyncRepository.fetchManagedAddonUrls()
+                    .onSuccess { remoteUrls ->
+                        addonRepository.reconcileWithRemoteAddonUrls(
+                            remoteUrls = remoteUrls,
+                            removeMissingLocal = false
+                        )
+                    }
+                    .onFailure { error ->
+                        Log.w(TAG, "Managed addon sync failed", error)
+                    }
+            } finally {
+                _uiState.update { it.copy(isSyncingManagedAddons = false) }
+            }
+        }
     }
 
     fun installAddon() {
@@ -471,6 +501,7 @@ class AddonManagerViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        managedAddonSyncJob?.cancel()
         stopServerInternal()
     }
 

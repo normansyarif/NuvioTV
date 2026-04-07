@@ -142,14 +142,20 @@ fun AddonManagerScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        viewModel.syncManagedAddons()
+    }
+
     DisposableEffect(lifecycleOwner, uiState.isQrModeActive, uiState.pendingChange, isEditing) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME &&
-                !uiState.isQrModeActive &&
-                uiState.pendingChange == null &&
-                !isEditing
-            ) {
-                requestInputBarFocus()
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.syncManagedAddons()
+                if (!uiState.isQrModeActive &&
+                    uiState.pendingChange == null &&
+                    !isEditing
+                ) {
+                    requestInputBarFocus()
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -341,7 +347,7 @@ fun AddonManagerScreen(
                         color = NuvioColors.TextPrimary
                     )
                     Spacer(modifier = Modifier.width(12.dp))
-                    if (uiState.isLoading && uiState.installedAddons.isEmpty()) {
+                    if ((uiState.isLoading && uiState.installedAddons.isEmpty()) || uiState.isSyncingManagedAddons) {
                         LoadingIndicator(modifier = Modifier.height(24.dp))
                     }
                 }

@@ -1,6 +1,7 @@
 package com.nuvio.tv.data.repository
 
 import android.util.Log
+import com.nuvio.tv.core.config.AddonBackendConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -14,8 +15,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "RemoteTitleRating"
-private const val RATING_STATUS_URL = "https://addon.syf.my.id/stremio-watched/trakt-rating.php"
-private const val RATING_UPDATE_URL = "https://addon.syf.my.id/stremio-watched/my-rate.php"
 
 @Singleton
 class RemoteTitleRatingRepository @Inject constructor(
@@ -27,7 +26,7 @@ class RemoteTitleRatingRepository @Inject constructor(
     ): Result<Int?> = withContext(Dispatchers.IO) {
         runCatching {
             val normalizedMediaType = normalizeMediaType(mediaType)
-            val url = RATING_STATUS_URL.toHttpUrl().newBuilder()
+            val url = AddonBackendConfig.ratingStatusUrl.toHttpUrl().newBuilder()
                 .addQueryParameter("tmdb", tmdbId)
                 .addQueryParameter("media_type", normalizedMediaType)
                 .build()
@@ -69,7 +68,7 @@ class RemoteTitleRatingRepository @Inject constructor(
                 .toString()
 
             val request = Request.Builder()
-                .url(RATING_UPDATE_URL)
+                .url(AddonBackendConfig.ratingUpdateUrl)
                 .header("Accept", "*/*")
                 .header("Content-Type", "application/json")
                 .post(payload.toRequestBody("application/json".toMediaType()))
@@ -103,7 +102,7 @@ class RemoteTitleRatingRepository @Inject constructor(
                 .toString()
 
             val request = Request.Builder()
-                .url(RATING_UPDATE_URL)
+                .url(AddonBackendConfig.ratingUpdateUrl)
                 .header("Accept", "*/*")
                 .header("Content-Type", "application/json")
                 .post(payload.toRequestBody("application/json".toMediaType()))

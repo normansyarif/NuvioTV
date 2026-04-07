@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Nuvio</string>
+    <string name="app_name">Netflix</string>
     <string name="type_movie">Movie</string>
     <string name="type_series">Series</string>
     <string name="type_unknown">Unknown</string>
@@ -7,7 +7,7 @@
     <!-- HomeScreen -->
     <string name="home_no_addons">No addons installed. Add one to get started.</string>
     <string name="home_no_catalog_addons">No catalog addons installed. Install a catalog addon to see content.</string>
-    <string name="auth_notice_nuvio_logged_out">You have been signed out of Nuvio. Please sign in again.</string>
+    <string name="auth_notice_nuvio_logged_out">You have been signed out of Netflix. Please sign in again.</string>
     <string name="auth_notice_trakt_logged_out">You have been signed out of Trakt. Please reconnect.</string>
     <string name="error_generic">An error occurred</string>
 
@@ -991,7 +991,7 @@
     <string name="catalog_see_all_empty_subtitle">Try a different catalog or check back later</string>
 
     <!-- LayoutSelectionScreen -->
-    <string name="layout_selection_welcome">Welcome to Nuvio</string>
+    <string name="layout_selection_welcome">Welcome to Netflix</string>
     <string name="layout_selection_subtitle">Choose your home screen layout</string>
     <string name="layout_selection_continue">Continue</string>
 

@@ -10,4 +10,8 @@ interface AddonRepository {
     suspend fun addAddon(url: String)
     suspend fun removeAddon(url: String)
     suspend fun setAddonOrder(urls: List<String>)
+    suspend fun reconcileWithRemoteAddonUrls(
+        remoteUrls: List<String>,
+        removeMissingLocal: Boolean = true
+    )
 }
