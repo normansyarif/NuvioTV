@@ -1,5 +1,5 @@
 <resources>
-    <string name="type_movie">Film</string>
+    <string name="type_movie">Netflix</string>
     <string name="type_series">Série</string>
 
     <!-- HomeScreen -->

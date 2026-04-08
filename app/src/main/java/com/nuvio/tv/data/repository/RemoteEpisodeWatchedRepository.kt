@@ -73,7 +73,7 @@ class RemoteEpisodeWatchedRepository @Inject constructor(
 
             okHttpClient.newCall(request).execute().use { response ->
                 val bodyString = response.body?.string().orEmpty()
-                if (!response.isSuccessful) {
+                if (response.code != 200) {
                     throw IOException("Failed to update watched status (${response.code})")
                 }
                 if (bodyString.isBlank()) return@use

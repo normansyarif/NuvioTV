@@ -458,6 +458,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     }
 
     schedulePosterStatusReconcilePipeline(displayRows)
+    scheduleUpNextWatchNextSyncPipeline(displayRows)
 }
 
 internal fun HomeViewModel.schedulePosterStatusReconcilePipeline(rows: List<CatalogRow>) {

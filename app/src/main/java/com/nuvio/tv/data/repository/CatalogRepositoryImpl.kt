@@ -35,7 +35,8 @@ class CatalogRepositoryImpl @Inject constructor(
         skip: Int,
         skipStep: Int,
         extraArgs: Map<String, String>,
-        supportsSkip: Boolean
+        supportsSkip: Boolean,
+        forceRefresh: Boolean
     ): Flow<NetworkResult<CatalogRow>> = flow {
         val cacheKey = buildCacheKey(
             addonBaseUrl = addonBaseUrl,
@@ -49,8 +50,10 @@ class CatalogRepositoryImpl @Inject constructor(
 
         // Emit cached data immediately if available
         val cached = catalogCache[cacheKey]
-        if (cached != null) {
+        if (!forceRefresh && cached != null) {
             emit(NetworkResult.Success(cached))
+        } else if (!forceRefresh) {
+            emit(NetworkResult.Loading)
         } else {
             emit(NetworkResult.Loading)
         }
@@ -90,8 +93,8 @@ class CatalogRepositoryImpl @Inject constructor(
                     skipStep = effectiveSkipStep
                 )
                 catalogCache[cacheKey] = catalogRow
-                // Only emit fresh data if it differs from cache
-                if (cached == null || cached.items != catalogRow.items) {
+                // Force-refresh callers should always receive the network result.
+                if (forceRefresh || cached == null || cached.items != catalogRow.items) {
                     emit(NetworkResult.Success(catalogRow))
                 }
             }

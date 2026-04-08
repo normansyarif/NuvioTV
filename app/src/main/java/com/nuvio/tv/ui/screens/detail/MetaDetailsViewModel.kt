@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.player.StreamAutoPlayPolicy
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.tvhome.UpNextCatalogWatchNextCoordinator
 import com.nuvio.tv.core.tmdb.TmdbMetadataService
 import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
@@ -76,6 +77,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val remoteTitleRatingRepository: RemoteTitleRatingRepository,
     private val libraryRepository: LibraryRepository,
     private val watchProgressRepository: WatchProgressRepository,
+    private val upNextCatalogWatchNextCoordinator: UpNextCatalogWatchNextCoordinator,
     private val trailerService: TrailerService,
     private val trailerSettingsDataStore: TrailerSettingsDataStore,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
@@ -1389,6 +1391,7 @@ class MetaDetailsViewModel @Inject constructor(
                     }
                 )
                 calculateNextToWatch()
+                syncUpNextWatchNextAfterSuccessfulEpisodeUpdate()
             } else {
                 toastError(updateResult.exceptionOrNull()?.message ?: "Failed to update episode watched status")
             }
@@ -1457,6 +1460,7 @@ class MetaDetailsViewModel @Inject constructor(
             if (marked > 0) {
                 calculateNextToWatch()
                 showMessage(context.getString(R.string.detail_marked_episodes_watched, marked))
+                syncUpNextWatchNextAfterSuccessfulEpisodeUpdate()
             }
             firstErrorMessage?.let(::toastError)
         }
@@ -1508,6 +1512,7 @@ class MetaDetailsViewModel @Inject constructor(
             if (unmarked > 0) {
                 calculateNextToWatch()
                 showMessage(context.getString(R.string.detail_marked_episodes_unwatched, unmarked))
+                syncUpNextWatchNextAfterSuccessfulEpisodeUpdate()
             }
             firstErrorMessage?.let(::toastError)
         }
@@ -1564,6 +1569,7 @@ class MetaDetailsViewModel @Inject constructor(
             if (marked > 0) {
                 calculateNextToWatch()
                 showMessage(context.getString(R.string.detail_marked_previous_watched, marked))
+                syncUpNextWatchNextAfterSuccessfulEpisodeUpdate()
             }
             firstErrorMessage?.let(::toastError)
         }
@@ -1589,6 +1595,14 @@ class MetaDetailsViewModel @Inject constructor(
         val tmdbLookupType = resolveTmdbContentType(meta).toApiString()
         return tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
             ?: tmdbService.ensureTmdbId(itemId, itemType)
+    }
+
+    private suspend fun syncUpNextWatchNextAfterSuccessfulEpisodeUpdate() {
+        runCatching {
+            upNextCatalogWatchNextCoordinator.refreshAndSyncInstalledUpNextSeriesCatalog()
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to refresh Up Next watch next sync: ${error.message}")
+        }
     }
 
     private fun isSeriesMeta(meta: Meta): Boolean {
