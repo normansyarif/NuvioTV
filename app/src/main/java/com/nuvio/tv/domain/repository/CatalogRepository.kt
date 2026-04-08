@@ -15,6 +15,7 @@ interface CatalogRepository {
         skip: Int = 0,
         skipStep: Int = 100,
         extraArgs: Map<String, String> = emptyMap(),
-        supportsSkip: Boolean = false
+        supportsSkip: Boolean = false,
+        forceRefresh: Boolean = false
     ): Flow<NetworkResult<CatalogRow>>
 }
