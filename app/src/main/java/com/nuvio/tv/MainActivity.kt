@@ -1199,45 +1199,28 @@ open class MainActivity : ComponentActivity() {
                         }
                         Box(modifier = Modifier.fillMaxSize()) {
                             CompositionLocalProvider(LocalNavViewModelStoreOwner provides navViewModelStoreOwner) {
-                                if (modernSidebarEnabled) {
-                                    ModernSidebarScaffold(
-                                        longPressBackHeld = longPressBackHeld,
+                                CinematicShell(
+                                    currentRoute = currentRoute,
+                                    rootRoutes = rootRoutes,
+                                    activeProfileName = activeProfile?.name ?: "Profile",
+                                    activeProfileAvatar = activeProfileAvatarImageUrl,
+                                    onSwitchProfile = handleSwitchProfile,
+                                    onNavigate = { route ->
+                                        optimisticRoute = route
+                                        navigateToDrawerRoute(navController, currentRoute, route)
+                                    },
+                                    onPlay = { id, type, addon ->
+                                        navController.navigate(Screen.Detail.createRoute(
+                                            itemId = id, itemType = type,
+                                            addonBaseUrl = addon, playOnLoad = true, manualSelection = true
+                                        ))
+                                    },
+                                    onExit = handleExitApp
+                                ) {
+                                    NuvioNavHost(
                                         navController = navController,
                                         startDestination = startDestination,
-                                        currentRoute = currentRoute,
-                                        rootRoutes = rootRoutes,
-                                        drawerItems = drawerItems,
-                                        selectedDrawerRoute = selectedDrawerRoute,
-                                        selectedDrawerItem = selectedDrawerItem,
-                                        sidebarCollapsed = sidebarCollapsed,
-                                        modernSidebarBlurEnabled = modernSidebarBlurEnabled,
-                                        hideBuiltInHeaders = hideBuiltInHeadersForFloatingPill,
-                                        activeProfileName = activeProfile?.name ?: "",
-                                        activeProfileColorHex = activeProfile?.avatarColorHex ?: "#1E88E5",
-                                        activeProfileAvatarImageUrl = activeProfileAvatarImageUrl,
-                                        showProfileSelector = profiles.size > 1,
-                                        onSwitchProfile = handleSwitchProfile,
-                                        onNavigate = { optimisticRoute = it },
-                                        onExitApp = handleExitApp
-                                    )
-                                } else {
-                                    LegacySidebarScaffold(
-                                        longPressBackHeld = longPressBackHeld,
-                                        navController = navController,
-                                        startDestination = startDestination,
-                                        currentRoute = currentRoute,
-                                        rootRoutes = rootRoutes,
-                                        drawerItems = drawerItems,
-                                        selectedDrawerRoute = selectedDrawerRoute,
-                                        sidebarCollapsed = sidebarCollapsed,
-                                        hideBuiltInHeaders = false,
-                                        activeProfileName = activeProfile?.name ?: "",
-                                        activeProfileColorHex = activeProfile?.avatarColorHex ?: "#1E88E5",
-                                        activeProfileAvatarImageUrl = activeProfileAvatarImageUrl,
-                                        showProfileSelector = profiles.size > 1,
-                                        onSwitchProfile = handleSwitchProfile,
-                                        onNavigate = { optimisticRoute = it },
-                                        onExitApp = handleExitApp
+                                        hideBuiltInHeaders = true
                                     )
                                 }
                             }

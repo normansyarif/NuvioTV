@@ -87,9 +87,17 @@ class ImdbEpisodeRatingsRepository @Inject constructor(
             Log.w(tag, "Primary episode ratings empty for imdbId=$imdbId, trying fallback.")
         }
 
-        if (tmdbId != null && tmdbId > 0) {
-            return fetchFromSeriesGraph(tmdbId)
+        // Source builds may have no TMDB key. Resolve only the public ID mapping
+        // so the official SeriesGraph fallback still works in that configuration.
+        val fallbackId = tmdbId?.takeIf { it > 0 } ?: imdbId?.let { id ->
+            try {
+                imdbTapframeApi.getRatingIds(id).body()?.meta?.tmdbId?.takeIf { it > 0 }
+            } catch (e: Exception) {
+                Log.w(tag, "Episode rating ID lookup failed for $id: ${e.message}")
+                null
+            }
         }
+        if (fallbackId != null) return fetchFromSeriesGraph(fallbackId)
 
         return emptyMap()
     }

@@ -36,11 +36,7 @@ fun StartupSplashScreen(
     brandWordmarkRes: Int? = null,
     modifier: Modifier = Modifier
 ) {
-    val avatarColor = remember(profileColorHex) {
-        profileColorHex?.let {
-            runCatching { Color(android.graphics.Color.parseColor(it)) }.getOrNull()
-        } ?: NuvioPrimitives.blue500
-    }
+    val avatarColor = Color(0xFFE50914)
 
     Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
         if (!profileBackgroundUrl.isNullOrBlank()) {

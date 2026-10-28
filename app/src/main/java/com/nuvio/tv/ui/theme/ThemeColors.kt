@@ -28,11 +28,19 @@ data class ThemeColorPalette(
 
 object ThemeColors {
     val Crimson = ThemeColorPalette(
-        secondary = NuvioPrimitives.red500,
-        secondaryVariant = NuvioPrimitives.red600,
-        focusRing = NuvioPrimitives.red300,
-        focusBackground = Color(0xFF3D1A1A),
-        backgroundCard = Color(0xFF241A1A)
+        secondary = Color(0xFFE50914),
+        secondaryVariant = Color(0xFFB20710),
+        focusRing = Color.White,
+        focusBackground = Color(0xFFE50914),
+        background = Color(0xFF080808),
+        backgroundElevated = Color(0xFF141414),
+        backgroundCard = Color(0xFF202020),
+        surface = Color(0xFF141414),
+        surfaceVariant = Color(0xFF292929),
+        panel = Color(0xFF141414),
+        field = Color(0xFF242424),
+        menu = Color(0xFF181818),
+        modal = Color(0xFF181818)
     )
 
     val Ocean = ThemeColorPalette(

@@ -364,38 +364,7 @@ fun HomeScreen(
                                 )
                         }
                     ) {
-                        when (uiState.homeLayout) {
-                            HomeLayout.CLASSIC -> ClassicHomeRoute(
-                                viewModel = viewModel,
-                                uiState = uiState,
-                                posterCardStyle = posterCardStyle,
-                                onNavigateToDetail = onNavigateToDetailStable,
-                                onContinueWatchingClick = onContinueWatchingClickStable,
-                                onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginningStable,
-                                onContinueWatchingPlayManually = onContinueWatchingPlayManuallyStable,
-                                showContinueWatchingManualPlayOption = effectiveAutoplayEnabled,
-                                onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAllStable,
-                                onNavigateToFolderDetail = onNavigateToFolderDetailStable,
-                                isCatalogItemWatched = isCatalogItemWatched,
-                                onCatalogItemLongPress = onCatalogItemLongPress
-                            )
-
-                            HomeLayout.GRID -> GridHomeRoute(
-                                viewModel = viewModel,
-                                uiState = uiState,
-                                posterCardStyle = posterCardStyle,
-                                onNavigateToDetail = onNavigateToDetailStable,
-                                onContinueWatchingClick = onContinueWatchingClickStable,
-                                onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginningStable,
-                                onContinueWatchingPlayManually = onContinueWatchingPlayManuallyStable,
-                                showContinueWatchingManualPlayOption = effectiveAutoplayEnabled,
-                                onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAllStable,
-                                onNavigateToFolderDetail = onNavigateToFolderDetailStable,
-                                isCatalogItemWatched = isCatalogItemWatched,
-                                onCatalogItemLongPress = onCatalogItemLongPress
-                            )
-
-                            HomeLayout.MODERN -> ModernHomeRoute(
+                        ModernHomeRoute(
                                 viewModel = viewModel,
                                 uiState = uiState,
                                 onNavigateToDetail = onNavigateToDetailStable,
@@ -407,7 +376,6 @@ fun HomeScreen(
                                 isCatalogItemWatched = isCatalogItemWatched,
                                 onCatalogItemLongPress = onCatalogItemLongPress
                             )
-                        }
                     }
                 }
             }
@@ -644,15 +612,7 @@ private fun ModernHomeRoute(
     val focusState by viewModel.focusState.collectAsStateWithLifecycle()
     val scrollToTopTrigger by viewModel.scrollToTopTrigger.collectAsStateWithLifecycle()
     val modernPresentation by viewModel.modernHomePresentation.collectAsStateWithLifecycle()
-    val enrichingItemId by viewModel.enrichingItemId.collectAsStateWithLifecycle()
-    val lastEnrichedPreview by viewModel.lastEnrichedPreview.collectAsStateWithLifecycle()
     val enrichedPreviews by viewModel.enrichedPreviews.collectAsStateWithLifecycle()
-    val failedEnrichmentIds by viewModel.failedEnrichmentIds.collectAsStateWithLifecycle()
-    val requestTrailerPreview = remember(viewModel) {
-        { itemId: String, title: String, releaseInfo: String?, apiType: String ->
-            viewModel.requestTrailerPreview(itemId, title, releaseInfo, apiType)
-        }
-    }
     val loadMoreCatalog = remember(viewModel) {
         { catalogId: String, addonId: String, type: String ->
             viewModel.onEvent(HomeEvent.OnLoadMoreCatalog(catalogId, addonId, type))
@@ -670,44 +630,25 @@ private fun ModernHomeRoute(
             viewModel.setLiveFocusedRowKey(rk)
         }
     }
-    val preloadAdjacentItem = remember(viewModel) {
-        { item: MetaPreview ->
-            viewModel.preloadAdjacentItem(item)
-        }
-    }
-    ModernHomeContent(
+    CinematicHomeContent(
         uiState = uiState,
-        modernPresentation = modernPresentation,
+        presentation = modernPresentation,
         focusState = focusState,
         scrollToTopTrigger = scrollToTopTrigger,
-        enrichingItemId = enrichingItemId,
-        lastEnrichedPreview = lastEnrichedPreview,
         enrichedPreviews = enrichedPreviews,
-        failedEnrichmentIds = failedEnrichmentIds,
-        trailerPreviewUrls = viewModel.trailerPreviewUrls,
-        trailerPreviewAudioUrls = viewModel.trailerPreviewAudioUrls,
         onNavigateToDetail = onNavigateToDetail,
         onContinueWatchingClick = onContinueWatchingClick,
         onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
         onContinueWatchingPlayManually = onContinueWatchingPlayManually,
-        showContinueWatchingManualPlayOption = showContinueWatchingManualPlayOption,
-        onRequestTrailerPreview = requestTrailerPreview,
-        onLoadMoreCatalog = loadMoreCatalog,
-        onRemoveContinueWatching = removeContinueWatching,
+        showManualPlay = showContinueWatchingManualPlayOption,
         isCatalogItemWatched = isCatalogItemWatched,
-        onCatalogItemLongPress = onCatalogItemLongPress,
+        onRemoveContinueWatching = removeContinueWatching,
         onNavigateToFolderDetail = onNavigateToFolderDetail,
-        onItemFocus = remember(viewModel) {
-            { item -> viewModel.onItemFocus(item) }
-        },
-        onPreloadAdjacentItem = preloadAdjacentItem,
-        onSaveFocusState = saveModernFocusState,
-        onFocusedRowKeyChanged = remember(viewModel) {
-            { key: String? -> viewModel.setLiveFocusedRowKey(key) }
-        },
-        onRequestLazyCatalogLoad = remember(viewModel) {
-            { catalogKey: String -> viewModel.requestLazyCatalogLoad(catalogKey) }
-        }
+        onCatalogItemLongPress = onCatalogItemLongPress,
+        onItemFocus = { viewModel.onItemFocus(it) },
+        onLoadMore = loadMoreCatalog,
+        onRequestLazyCatalogLoad = { viewModel.requestLazyCatalogLoad(it) },
+        onSaveFocus = saveModernFocusState
     )
 }
 

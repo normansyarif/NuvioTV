@@ -27,7 +27,16 @@ interface SeriesGraphApi {
     ): Response<List<SeriesGraphSeasonRatingsDto>>
 }
 
+@JsonClass(generateAdapter = true)
+data class EpisodeRatingIdResponse(@field:Json(name = "meta") val meta: EpisodeRatingIds? = null)
+
+@JsonClass(generateAdapter = true)
+data class EpisodeRatingIds(@field:Json(name = "moviedb_id") val tmdbId: Int? = null)
+
 interface ImdbTapframeApi {
+    @GET("https://v3-cinemeta.strem.io/meta/series/{imdbId}.json")
+    suspend fun getRatingIds(@Path("imdbId") imdbId: String): Response<EpisodeRatingIdResponse>
+
     @GET("api/shows/{imdbId}/season-ratings")
     suspend fun getSeasonRatings(
         @Path("imdbId") imdbId: String

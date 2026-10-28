@@ -583,7 +583,7 @@ object NetworkModule {
         val normalizedBaseUrl = if (rawBaseUrl.isNotBlank()) {
             if (rawBaseUrl.endsWith('/')) rawBaseUrl else "$rawBaseUrl/"
         } else {
-            "http://localhost/"
+            "https://seriesgraph.com/"
         }
         return Retrofit.Builder()
             .baseUrl(normalizedBaseUrl)
@@ -605,7 +605,7 @@ object NetworkModule {
         val normalizedBaseUrl = if (rawBaseUrl.isNotBlank()) {
             if (rawBaseUrl.endsWith('/')) rawBaseUrl else "$rawBaseUrl/"
         } else {
-            "http://localhost/"
+            "https://imdb.tapframe.space/"
         }
         return Retrofit.Builder()
             .baseUrl(normalizedBaseUrl)

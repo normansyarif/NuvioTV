@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -46,6 +47,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.tv.material3.Border
@@ -81,6 +84,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.painter.Painter
 import coil3.request.ImageRequest
@@ -93,13 +98,15 @@ import java.util.Locale
 
 private const val MAX_VISIBLE_HERO_GENRES = 6
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun HeroContentSection(
     meta: Meta,
     nextEpisode: Video?,
     nextToWatch: NextToWatch?,
     onPlayClick: () -> Unit,
+    onEpisodesClick: () -> Unit = {},
+    episodesButtonFocusRequester: FocusRequester? = null,
     isPlayEnabled: Boolean = true,
     onPlayLongPress: (() -> Unit)? = null,
     isInLibrary: Boolean,
@@ -165,17 +172,17 @@ fun HeroContentSection(
 
     // Animate logo properties for trailer mode
     val logoHeight by animateDpAsState(
-        targetValue = if (isTrailerPlaying) 60.dp else 100.dp,
+        targetValue = if (isTrailerPlaying) 60.dp else 72.dp,
         animationSpec = tween(600),
         label = "logoHeight"
     )
     val logoBottomPadding by animateDpAsState(
-        targetValue = if (isTrailerPlaying) NuvioTheme.spacing.xl else NuvioTheme.spacing.lg,
+        targetValue = if (isTrailerPlaying) NuvioTheme.spacing.xl else 8.dp,
         animationSpec = tween(600),
         label = "logoPadding"
     )
     val logoMaxWidth by animateFloatAsState(
-        targetValue = if (isTrailerPlaying) 0.25f else 0.4f,
+        targetValue = if (isTrailerPlaying) 0.25f else 0.42f,
         animationSpec = tween(600),
         label = "logoWidth"
     )
@@ -183,14 +190,14 @@ fun HeroContentSection(
     // on screens taller than the hero (lower-density TV boxes).
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
     val heroHeight by animateDpAsState(
-        targetValue = if (isTrailerPlaying) maxOf(540.dp, screenHeight) else 540.dp,
+        targetValue = if (isTrailerPlaying) maxOf(540.dp, screenHeight) else maxOf(540.dp, screenHeight),
         animationSpec = tween(600),
         label = "heroHeight"
     )
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(heroHeight),
+            .heightIn(min = heroHeight).semantics { testTagsAsResourceId = true },
         verticalArrangement = Arrangement.Bottom
     ) {
         Column(
@@ -202,6 +209,15 @@ fun HeroContentSection(
                 .padding(start = NuvioTheme.spacing.xxxl, end = NuvioTheme.spacing.xxxl, bottom = NuvioTheme.spacing.lg),
             verticalArrangement = Arrangement.Bottom
         ) {
+            if (!isTrailerPlaying) {
+                Text(
+                    text = if (isSeriesApi) "S E R I E S" else "F I L M",
+                    color = NuvioTheme.colors.Secondary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
             // Logo/Title — always visible during trailer, animates size
             if (shouldShowLogo) {
                 AsyncImage(
@@ -252,22 +268,55 @@ fun HeroContentSection(
                 exit = fadeOut(tween(NuvioMotion.tokens.durations.overlay))
             ) {
                 Column {
+                    MetaInfoRow(
+                        meta = meta,
+                        hideImdbRating = hideMetaInfoImdb,
+                        showFullReleaseDate = showFullReleaseDate,
+                        tmdbRating = tmdbRating
+                    )
+                    Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
+
+                    // Director/Writer line above description
+                    if (!creditLine.isNullOrBlank()) {
+                        Text(
+                            text = creditLine,
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                textDirection = creditLine.contentTextDirection()
+                            ),
+                            color = NuvioTheme.extendedColors.textSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth(0.52f)
+                        )
+                        Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
+                    }
+
+                    if (mdbListRatings?.isEmpty() == false) {
+                        MDBListRatingsRow(ratings = mdbListRatings, order = mdbListRatingOrder)
+                        Spacer(modifier = Modifier.height(14.dp))
+                    }
+
+                    meta.description?.let { description ->
+                        SynopsisDescription(
+                            description = description,
+                            onShowFullDescription = onShowFullDescription,
+                            maxLines = 3,
+                            downFocusRequester = playButtonFocusRequester,
+                            onFocused = onHeroActionFocused,
+                            onTruncationChanged = onTruncationChanged,
+                            modifier = Modifier
+                                .fillMaxWidth(0.52f)
+                                .padding(bottom = NuvioTheme.spacing.md)
+                        )
+                    }
+
+
+                    Spacer(modifier = Modifier.height(10.dp))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        PlayButton(
-                            text = if (isPlayEnabled) nextToWatch?.displayText else stringResource(R.string.playback_unavailable),
-                            enabled = isPlayEnabled,
-                            onClick = onPlayClick,
-                            onLongPress = onPlayLongPress,
-                            focusRequester = playButtonFocusRequester,
-                            restoreFocusToken = restorePlayFocusToken,
-                            onFocusRestored = {
-                                onHeroActionFocused()
-                                onPlayFocusRestored()
-                            }
-                        )
+
 
                         ActionIconButton(
                             icon = if (isInLibrary) Icons.Default.Check else null,
@@ -324,47 +373,40 @@ fun HeroContentSection(
                         }
                     }
 
+                    Column(Modifier.width(320.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        PlayButton(
+                            text = if (isPlayEnabled) cinematicPlayLabel(isSeriesApi,
+                                nextEpisode?.season ?: nextToWatch?.nextSeason,
+                                nextEpisode?.episode ?: nextToWatch?.nextEpisode)
+                                else stringResource(R.string.playback_unavailable),
+                            modifier = Modifier.fillMaxWidth().testTag("detail_play"),
+                            enabled = isPlayEnabled,
+                            onClick = onPlayClick,
+                            onLongPress = onPlayLongPress,
+                            focusRequester = playButtonFocusRequester,
+                            restoreFocusToken = restorePlayFocusToken,
+                            onFocusRestored = {
+                                onHeroActionFocused()
+                                onPlayFocusRestored()
+                            }
+                        )
+                        if (isSeriesApi) {
+                            Button(onClick = onEpisodesClick,
+                                modifier = Modifier.fillMaxWidth().testTag("detail_episodes")
+                                    .then(if (episodesButtonFocusRequester != null) Modifier.focusRequester(episodesButtonFocusRequester) else Modifier)
+                                    .onFocusChanged { if (it.isFocused) onHeroActionFocused() },
+                                shape = ButtonDefaults.shape(RoundedCornerShape(4.dp)),
+                                scale = ButtonDefaults.scale(focusedScale = 1f),
+                                colors = ButtonDefaults.colors(containerColor = Color.Transparent,
+                                    contentColor = Color.White, focusedContainerColor = Color.White, focusedContentColor = Color.Black),
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp)) {
+                                Text("▤  Episodes", style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(NuvioTheme.spacing.lg))
 
-                    // Director/Writer line above description
-                    if (!creditLine.isNullOrBlank()) {
-                        Text(
-                            text = creditLine,
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                textDirection = creditLine.contentTextDirection()
-                            ),
-                            color = NuvioTheme.extendedColors.textSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth(0.6f)
-                        )
-                        Spacer(modifier = Modifier.height(NuvioTheme.spacing.md))
-                    }
 
-                    if (mdbListRatings?.isEmpty() == false) {
-                        MDBListRatingsRow(ratings = mdbListRatings, order = mdbListRatingOrder)
-                        Spacer(modifier = Modifier.height(14.dp))
-                    }
-
-                    meta.description?.let { description ->
-                        SynopsisDescription(
-                            description = description,
-                            onShowFullDescription = onShowFullDescription,
-                            upFocusRequester = playButtonFocusRequester,
-                            onFocused = onHeroActionFocused,
-                            onTruncationChanged = onTruncationChanged,
-                            modifier = Modifier
-                                .fillMaxWidth(0.6f)
-                                .padding(bottom = NuvioTheme.spacing.md)
-                        )
-                    }
-
-                    MetaInfoRow(
-                        meta = meta,
-                        hideImdbRating = hideMetaInfoImdb,
-                        showFullReleaseDate = showFullReleaseDate,
-                        tmdbRating = tmdbRating
-                    )
                 }
             }
         }
@@ -395,6 +437,7 @@ internal fun PlayButton(
     val playPainter = rememberRawSvgPainter(rawIconRes = com.nuvio.tv.R.raw.ic_player_play)
 
     Button(
+        scale = ButtonDefaults.scale(focusedScale = 1f),
         enabled = enabled,
         onClick = {
             if (longPressTriggered) {
@@ -442,7 +485,6 @@ internal fun PlayButton(
                 }
                 false
             }
-            .focusProperties { up = FocusRequester.Cancel }
             .then(
                 if (text == null) {
                     Modifier.semantics { this.contentDescription = playFallbackLabel }
@@ -451,21 +493,21 @@ internal fun PlayButton(
                 }
             ),
         colors = ButtonDefaults.colors(
-            containerColor = androidx.compose.ui.graphics.Color.White,
-            focusedContainerColor = androidx.compose.ui.graphics.Color.White,
-            contentColor = androidx.compose.ui.graphics.Color.Black,
-            focusedContentColor = androidx.compose.ui.graphics.Color.Black
+            containerColor = Color(0xCC292929),
+            focusedContainerColor = Color.White,
+            contentColor = Color.White,
+            focusedContentColor = Color.Black
         ),
         shape = ButtonDefaults.shape(
-            shape = RoundedCornerShape(NuvioTheme.spacing.xxl)
+            shape = RoundedCornerShape(4.dp)
         ),
         border = ButtonDefaults.border(
             focusedBorder = Border(
                 border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
-                shape = RoundedCornerShape(NuvioTheme.spacing.xxl)
+                shape = RoundedCornerShape(4.dp)
             )
         ),
-        contentPadding = PaddingValues(horizontal = NuvioTheme.spacing.xl, vertical = 14.dp)
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -606,7 +648,6 @@ private fun ActionIconButton(
                 }
                 false
             }
-            .focusProperties { up = FocusRequester.Cancel }
             .semantics {
                 if (toggleable) {
                     role = Role.Checkbox
@@ -714,7 +755,7 @@ private fun MetaInfoRow(
         }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)) {
+    Column(modifier = Modifier.fillMaxWidth(0.62f), verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)) {
         // Primary row: Genres, Release, Ratings
         Row(
             modifier = if (reserveImdbRatingHeight) Modifier.height(30.dp) else Modifier,

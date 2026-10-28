@@ -106,6 +106,24 @@ class DetailEpisodeShuffleTest {
         assertEquals(native, result.nextToWatch)
     }
 
+    @Test
+    fun `browsing another season does not change main play before progress loads`() {
+        val seasonTwo = Video("show:2:1", "Season two", "2020-01-01", null,
+            season = 2, episode = 1, overview = null)
+        every { meta.videos } returns videos + seasonTwo
+        every { meta.watchableEpisodes() } returns videos + seasonTwo
+        assertEquals(videos.first().id, resolveHeroPlaybackVideo(meta, null, listOf(seasonTwo))?.id)
+    }
+
+    @Test
+    fun `resolved next episode wins over the season currently being browsed`() {
+        val seasonTwo = Video("show:2:7", "Next episode", "2020-01-01", null,
+            season = 2, episode = 7, overview = null)
+        every { meta.videos } returns videos + seasonTwo
+        val next = NextToWatch(null, false, seasonTwo.id, 2, 7, "Play S2E7")
+        assertEquals(seasonTwo.id, resolveHeroPlaybackVideo(meta, next, videos)?.id)
+    }
+
     private fun project(
         input: MetaDetailsUiState = state,
         resume: List<WatchProgress> = emptyList(),

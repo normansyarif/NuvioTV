@@ -10,6 +10,7 @@ import com.nuvio.tv.domain.model.NextToWatch
 import com.nuvio.tv.domain.model.ShuffleSurface
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
+import com.nuvio.tv.domain.model.watchableEpisodes
 
 internal fun applyDetailShuffle(
     state: MetaDetailsUiState,
@@ -74,5 +75,7 @@ internal fun resolveHeroPlaybackVideo(
     }
     return meta.videos.firstOrNull {
         it.id == meta.behaviorHints?.defaultVideoId && it.available != false
-    } ?: episodesForSeason.firstOrNull()
+    } ?: meta.watchableEpisodes().minWithOrNull(
+        compareBy<Video> { it.season ?: Int.MAX_VALUE }.thenBy { it.episode ?: Int.MAX_VALUE }
+    ) ?: episodesForSeason.firstOrNull()
 }

@@ -63,7 +63,7 @@ fun NuvioTheme(
     content: @Composable () -> Unit
 ) {
     val palette = androidx.compose.runtime.remember(appTheme, customThemeColors) {
-        ThemeColors.getColorPalette(appTheme, customThemeColors)
+        ThemeColors.Crimson
     }
     val focusRingStyle = createFocusRingStyle(palette)
     val colorScheme = NuvioColorScheme(
