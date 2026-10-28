@@ -54,6 +54,9 @@
 -keep class fi.iki.elonen.** { *; }
 # Keep server classes and their inner data classes (serialized with Gson)
 -keep class com.nuvio.tv.core.server.** { *; }
+# Companion wire field names and default constructors are read reflectively by Gson.
+-keep class com.nuvio.tv.core.companion.CompanionPlayRequest { *; }
+-keep class com.nuvio.tv.core.companion.CompanionSubtitle { *; }
 
 # ── Torrent streaming (Nuvio Engine) ───────────────────────────────────────────
 -keep class com.nuvio.tv.core.torrent.** { *; }

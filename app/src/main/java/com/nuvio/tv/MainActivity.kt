@@ -328,6 +328,8 @@ open class MainActivity : ComponentActivity() {
     @Inject
     lateinit var partyRepository: PartyRepository
 
+    private val companionReceiver by lazy { com.nuvio.tv.core.companion.CompanionReceiver(this) }
+
     private val pendingDeepLinkUrl = MutableStateFlow<String?>(null)
     private val pendingLaunchIntent = MutableStateFlow<Intent?>(null)
 
@@ -867,6 +869,39 @@ open class MainActivity : ComponentActivity() {
                     }
                     val navController = rememberNavController()
                     val navViewModelStoreOwner = rememberNavSessionViewModelStoreOwner(navController)
+                    androidx.compose.runtime.DisposableEffect(navController, activeProfileId, layoutChosen, needsExperienceSelection) {
+                        companionReceiver.setReady(layoutChosen && !needsExperienceSelection)
+                        onDispose { companionReceiver.setReady(false) }
+                    }
+                    val companionPlay by companionReceiver.pendingPlay.collectAsState()
+                    LaunchedEffect(companionPlay, navController) {
+                        val request = companionPlay ?: return@LaunchedEffect
+                        companionReceiver.pendingPlay.value = null
+                        com.nuvio.tv.ui.screens.player.StreamSidecarSubtitles.set(request.url, request.subtitles.mapIndexed { index, subtitle ->
+                            com.nuvio.tv.domain.model.Subtitle(
+                                id = "companion-$index", url = subtitle.url, lang = subtitle.language,
+                                addonName = subtitle.name ?: request.addonName ?: "iPhone",
+                                addonLogo = null, isStreamProvided = true, headers = subtitle.headers
+                            )
+                        })
+                        navController.navigate(Screen.Player.createRoute(
+                            streamUrl = request.url, title = request.episodeTitle ?: request.title,
+                            headers = request.headers, contentId = request.contentId,
+                            contentType = request.contentType, contentName = request.title,
+                            videoId = request.videoId, season = request.season, episode = request.episode,
+                            episodeTitle = request.episodeTitle, poster = request.poster,
+                            backdrop = request.backdrop, logo = request.logo, streamName = request.streamName,
+                            addonName = request.addonName, filename = request.filename,
+                            bingeGroup = request.bingeGroup, profileId = activeProfileId,
+                            startFromBeginning = true, returnToHomeOnBack = true
+                        ) + "&companionRequestId=${request.requestId}") {
+                            // Dispose the old player before creating the replacement, including identical URLs.
+                            if (navController.currentDestination?.route == Screen.Player.route) {
+                                popUpTo(Screen.Player.route) { inclusive = true }
+                            }
+                        }
+                    }
+
                     var optimisticRoute by remember { mutableStateOf<String?>(null) }
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val actualRoute = navBackStackEntry?.destination?.route
@@ -1375,11 +1410,13 @@ open class MainActivity : ComponentActivity() {
         // tracked; onActivityResult keeps it for a completion or dismisses it otherwise.
         externalPlaybackTracker.raiseAutoNextOverlayOnReturn()
         super.onStart()
+        companionReceiver.setForeground(true)
         startupSyncService.startPeriodicSurfacePulls()
         androidTvChannelSyncService.onForegroundChanged(true)
     }
 
     override fun onStop() {
+        companionReceiver.setForeground(false)
         externalPlaybackTracker.onExternalPlayerCoveredApp()
         super.onStop()
         startupSyncService.stopPeriodicSurfacePulls()
@@ -1390,6 +1427,7 @@ open class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        companionReceiver.setReady(false)
         PluginRuntimeHooks.onActivityDestroy()
     }
 }

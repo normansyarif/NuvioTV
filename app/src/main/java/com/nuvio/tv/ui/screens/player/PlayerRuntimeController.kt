@@ -174,6 +174,7 @@ class PlayerRuntimeController(
         val selection: RememberedSubtitleSelection
     )
 
+    internal val companionRequestId: String? = savedStateHandle["companionRequestId"]
     internal val navigationArgs = PlayerNavigationArgs.from(savedStateHandle)
     internal val initialStreamUrl: String = navigationArgs.streamUrl
     internal val title: String = navigationArgs.title

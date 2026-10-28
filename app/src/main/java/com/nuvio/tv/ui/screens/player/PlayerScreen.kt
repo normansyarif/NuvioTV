@@ -210,6 +210,16 @@ fun PlayerScreen(
     onOpenPartyMedia: (PartyMedia) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val companionRequestId = viewModel.controller.companionRequestId
+    LaunchedEffect(companionRequestId, uiState.isPlaying, uiState.error) {
+        when {
+            uiState.error != null -> com.nuvio.tv.core.companion.CompanionPlaybackStatus.report(companionRequestId, "error")
+            uiState.isPlaying -> com.nuvio.tv.core.companion.CompanionPlaybackStatus.report(companionRequestId, "playing")
+        }
+    }
+    androidx.compose.runtime.DisposableEffect(companionRequestId) {
+        onDispose { com.nuvio.tv.core.companion.CompanionPlaybackStatus.report(companionRequestId, "stopped") }
+    }
     val playerBadges = rememberPlayerBadges(viewModel, uiState)
     val partyState by viewModel.party.state.collectAsState()
     val partyPlayback by viewModel.party.playback.collectAsState()

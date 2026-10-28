@@ -704,6 +704,7 @@ private fun PlaybackNavHost(
             route = Screen.Player.route,
             arguments = listOf(
                 navArgument("streamUrl") { type = NavType.StringType },
+                navArgument("companionRequestId") { type = NavType.StringType; nullable = true; defaultValue = null },
                 navArgument("title") { type = NavType.StringType },
                 navArgument("streamName") {
                     type = NavType.StringType
