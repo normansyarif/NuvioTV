@@ -494,7 +494,6 @@ class MetaDetailsViewModel @Inject constructor(
                         state.copy(episodeProgressMap = progressMap)
                     }
                 }
-                revalidateLocalWatchedEpisodesAgainstActiveProvider(progressMap)
                 // Recalculate next to watch when progress changes
                 reevaluateSeriesWatchedBadge()
                 calculateNextToWatch()
@@ -513,43 +512,9 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
-    private fun revalidateLocalWatchedEpisodesAgainstActiveProvider(
-        providerProgressMap: Map<Pair<Int, Int>, WatchProgress>
-    ) {
-        if (itemType.equals("other", ignoreCase = true)) return
-        if (itemType.equals("movie", ignoreCase = true)) return
-        if (providerProgressMap.isEmpty()) return
-        val hasCompletedEntries = providerProgressMap.values.any { it.isCompleted() }
-        if (!hasCompletedEntries) return
-        val profileId = profileManager.activeProfileId.value
-
-        viewModelScope.launch(Dispatchers.IO) {
-            if (!watchProgressRepository.activeProviderOwnsCompletedHistoryProjection()) return@launch
-            if (profileManager.activeProfileId.value != profileId) return@launch
-
-            val contentId = _effectiveContentId.value
-            val localWatched = watchedItemsPreferences
-                .getWatchedEpisodesForContent(contentId, profileId)
-                .first()
-            if (profileManager.activeProfileId.value != profileId) return@launch
-            if (localWatched.isEmpty()) return@launch
-
-            val staleEpisodes = localWatched.filter { (season, episode) ->
-                val providerEntry = providerProgressMap[season to episode]
-                providerEntry == null || !providerEntry.isCompleted()
-            }
-
-            if (staleEpisodes.isNotEmpty()) {
-                Log.d(TAG, "revalidateWatchedEpisodes: pruning ${staleEpisodes.size} stale entries for $contentId")
-                watchedItemsPreferences.unmarkAsWatchedBatch(
-                    contentId = contentId,
-                    episodes = staleEpisodes.toList(),
-                    profileId = profileId
-                )
-            }
-        }
-    }
-
+    // The playback projection can contain only the current episode while Trakt
+    // history is loading or refreshing. Absence from that projection is not an
+    // unwatch action; only explicit history mutations may delete local marks.
     private fun observeWatchedEpisodes() {
         if (itemType.lowercase() == "movie") return
         viewModelScope.launch {

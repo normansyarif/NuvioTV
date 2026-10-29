@@ -206,7 +206,11 @@ fun HeroContentSection(
                 .animateContentSize(
                     animationSpec = tween(600)
                 )
-                .padding(start = NuvioTheme.spacing.xxxl, end = NuvioTheme.spacing.xxxl, bottom = NuvioTheme.spacing.lg),
+                .padding(
+                    start = NuvioTheme.spacing.xxxl,
+                    end = NuvioTheme.spacing.xxxl,
+                    bottom = NuvioTheme.spacing.lg + if (isTrailerPlaying) 0.dp else 20.dp
+                ),
             verticalArrangement = Arrangement.Bottom
         ) {
             if (!isTrailerPlaying) {
@@ -373,6 +377,7 @@ fun HeroContentSection(
                         }
                     }
 
+                    Spacer(modifier = Modifier.height(16.dp))
                     Column(Modifier.width(320.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         PlayButton(
                             text = if (isPlayEnabled) cinematicPlayLabel(isSeriesApi,

@@ -17,6 +17,8 @@ import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
@@ -46,6 +48,14 @@ class TraktProgressServiceRefreshTest {
 
     @Volatile
     private var playbackHangs = false
+
+    @Volatile
+    private var playbackGate: CompletableDeferred<Unit>? = null
+
+    @Volatile
+    private var playbackPercent = 40f
+
+    private val cancelledPlaybackCalls = AtomicInteger()
 
     @Test
     fun `watch action refetches only the changed watched list and the next poll skips it`() = runBlocking {
@@ -118,6 +128,32 @@ class TraktProgressServiceRefreshTest {
         assertEquals(2, playbackCalls.get())
     }
 
+    @Test
+    fun `a new refresh does not cancel a slow snapshot before continue watching updates`() = runBlocking<Unit> {
+        val service = loadedService()
+        val gate = CompletableDeferred<Unit>()
+        playbackGate = gate
+        playbackPercent = 70f
+        try {
+            service.refreshNow()
+            waitUntil { playbackCalls.get() >= 2 }
+            // A second signal is outside the manual refresh throttle but arrives
+            // before the first HTTP snapshot can finish.
+            delay(2_100L)
+            service.refreshNow()
+            delay(100L)
+            assertEquals(0, cancelledPlaybackCalls.get())
+            gate.complete(Unit)
+            withTimeout(TIMEOUT_MS) {
+                service.observeAllProgress().first { items ->
+                    items.any { it.contentId == MOVIE_ID && it.progressPercent == 70f }
+                }
+            }
+        } finally {
+            gate.complete(Unit)
+        }
+    }
+
     private suspend fun loadedService(): TraktProgressService {
         val service = createService()
         withTimeout(TIMEOUT_MS) {
@@ -155,13 +191,19 @@ class TraktProgressServiceRefreshTest {
         coEvery { traktApi.getPlayback(any(), any(), any(), any()) } coAnswers {
             playbackCalls.incrementAndGet()
             if (playbackHangs) awaitCancellation()
+            try {
+                playbackGate?.await()
+            } catch (error: CancellationException) {
+                cancelledPlaybackCalls.incrementAndGet()
+                throw error
+            }
             if (secondArg<String>() == "movies") {
                 Response.success(
                     listOf(
                         TraktPlaybackItemDto(
                             id = 1L,
                             type = "movie",
-                            progress = 40f,
+                            progress = playbackPercent,
                             pausedAt = "2026-01-01T00:00:00.000Z",
                             movie = TraktMovieDto(title = "Movie", ids = TraktIdsDto(trakt = 1, imdb = MOVIE_ID))
                         )

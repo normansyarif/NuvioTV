@@ -28,6 +28,7 @@ import com.nuvio.tv.data.remote.dto.trakt.TraktWatchedMovieItemDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktWatchedShowItemDto
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.MetaRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -40,6 +41,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -266,35 +269,28 @@ class TraktProgressService @Inject constructor(
     init {
         scope.launch {
             var isInitialEmission = true
-            profileManager.activeProfileId
-                .collectLatest {
-                    if (isInitialEmission) {
-                        // The initial emission is the current profile loaded from storage
-                        // on cold start. Don't emit a refresh signal here — the refresh
-                        // loop's onStart already fires the first fetch, and emitting here
-                        // would cancel that in-flight fetch via collectLatest.
-                        isInitialEmission = false
-                        return@collectLatest
+            profileManager.activeProfileId.collectLatest {
+                // Switching profiles still cancels the previous profile's work.
+                // Ordinary refresh requests must not cancel an in-flight snapshot.
+                if (!isInitialEmission) resetProfileScopedState()
+                isInitialEmission = false
+                refreshEvents().conflate().collect {
+                    val success = try {
+                        refreshRemoteSnapshot()
+                        true
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
+                        Log.w(TAG, "Failed to refresh remote snapshot", error)
+                        false
                     }
-                    resetProfileScopedState()
-                    refreshSignals.tryEmit(Unit)
+                    updateRefreshBackoff(success)
                 }
+            }
         }
         scope.launch {
             traktSettingsDataStore.continueWatchingDaysCap.collectLatest { days ->
                 continueWatchingWindowDays = days
-            }
-        }
-        scope.launch {
-            refreshEvents().collectLatest {
-                val success = try {
-                    refreshRemoteSnapshot()
-                    true
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to refresh remote snapshot", e)
-                    false
-                }
-                updateRefreshBackoff(success)
             }
         }
     }
@@ -1099,6 +1095,8 @@ class TraktProgressService @Inject constructor(
 
             val snapshot = try {
                 progressDeferred.await()
+            } catch (error: CancellationException) {
+                throw error
             } catch (e: Exception) {
                 Log.w(TAG, "fetchAllProgressSnapshot failed, keeping existing snapshot", e)
                 null

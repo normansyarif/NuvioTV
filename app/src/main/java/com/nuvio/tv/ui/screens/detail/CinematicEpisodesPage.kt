@@ -32,7 +32,8 @@ import coil3.request.ImageRequest
 import coil3.request.transformations
 import com.nuvio.tv.domain.model.*
 import com.nuvio.tv.ui.util.BlurTransformation
-import com.nuvio.tv.ui.components.ImdbRatingSourceLabel
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
 
 /** Full-screen episode browser. It shares the detail session's progress and season state. */
 @Composable
@@ -266,11 +267,12 @@ private fun EpisodeListEntry(video: Video, index: Int, watched: Boolean, progres
                 rating?.let { episodeRating ->
                     Row(Modifier.align(Alignment.TopEnd).padding(6.dp)
                         .background(Color(0xE6080808), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 6.dp, vertical = 4.dp).testTag("episode_imdb_rating"),
-                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        ImdbRatingSourceLabel(logoModifier = Modifier.width(30.dp).height(15.dp),
-                            textStyle = MaterialTheme.typography.labelSmall, textColor = Color.White)
-                        Text("%.1f".format(episodeRating), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        .padding(horizontal = 4.dp, vertical = 2.dp).testTag("episode_imdb_rating"),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Icon(Icons.Default.Star, contentDescription = null,
+                            tint = Color(0xFFFFD54F), modifier = Modifier.size(11.dp))
+                        Text("%.1f".format(episodeRating), color = Color.White, fontSize = 10.sp,
+                            lineHeight = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
                 val percent = progress?.progressPercentage ?: if (watched) 1f else 0f
