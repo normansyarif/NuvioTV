@@ -79,6 +79,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -90,6 +91,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
@@ -1764,6 +1766,8 @@ private fun EditProfileOverlay(
         else -> null
     }
     val nameFocusRequester = remember { FocusRequester() }
+    val saveFocusRequester = remember { FocusRequester() }
+    val cancelFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
         repeat(2) { withFrameNanos { } }
@@ -1835,6 +1839,9 @@ private fun EditProfileOverlay(
                            else stringResource(R.string.profile_save),
                     isPrimary = true,
                     enabled = profileName.isNotBlank() && !isSaving,
+                    modifier = Modifier
+                        .focusRequester(saveFocusRequester)
+                        .focusProperties { down = nameFocusRequester },
                     onClick = {
                         onSaveProfile(
                             profile.copy(
@@ -1888,13 +1895,24 @@ private fun EditProfileOverlay(
                     ProfileNameField(
                         value = profileName,
                         onValueChange = { if (it.length <= 20) profileName = it },
-                        focusRequester = nameFocusRequester
+                        focusRequester = nameFocusRequester,
+                        onMoveUp = {
+                            if (profileName.isNotBlank() && !isSaving) {
+                                saveFocusRequester.requestFocus()
+                            } else {
+                                cancelFocusRequester.requestFocus()
+                            }
+                        },
+                        onMoveDown = { cancelFocusRequester.requestFocus() }
                     )
 
                     OverlayButton(
                         text = stringResource(R.string.profile_cancel),
                         isPrimary = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(cancelFocusRequester)
+                            .focusProperties { up = nameFocusRequester },
                         onClick = onDismiss
                     )
                 }
@@ -2494,10 +2512,13 @@ private fun ProfileNameField(
     value: String,
     onValueChange: (String) -> Unit,
     focusRequester: FocusRequester,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val backgroundColor by animateColorAsState(
         targetValue = if (isFocused) NuvioTheme.colors.FocusBackground else Color.White.copy(alpha = 0.05f),
         animationSpec = tween(120),
@@ -2537,6 +2558,22 @@ private fun ProfileNameField(
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(focusRequester)
+                .onPreviewKeyEvent { event ->
+                    val native = event.nativeKeyEvent
+                    val direction = when (native.keyCode) {
+                        AndroidKeyEvent.KEYCODE_DPAD_UP -> FocusDirection.Up
+                        AndroidKeyEvent.KEYCODE_DPAD_DOWN -> FocusDirection.Down
+                        else -> return@onPreviewKeyEvent false
+                    }
+                    // A single-line editor consumes vertical arrows for cursor movement.
+                    // Route them before the editor so the TV remote can leave the field.
+                    if (native.action == AndroidKeyEvent.ACTION_DOWN) {
+                        keyboardController?.hide()
+                        val move = if (direction == FocusDirection.Up) onMoveUp else onMoveDown
+                        if (move != null) move() else focusManager.moveFocus(direction)
+                    }
+                    true
+                }
                 .onFocusChanged { isFocused = it.isFocused },
             textStyle = TextStyle(
                 color = Color.White,
