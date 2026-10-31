@@ -579,6 +579,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val heroSectionEnabled = _uiState.value.heroSectionEnabled
     val hideUnreleased = _uiState.value.hideUnreleasedContent
     val titlesSnapshot = customCatalogTitles
+    val heroSessionSeed = HeroSession.seed.value
 
     val (displayRows, baseHeroItems, baseGridItems, fullRowsFiltered) = withContext(Dispatchers.Default) {
         val rawRows = orderedKeys.mapNotNull { key ->
@@ -671,6 +672,16 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         )
 
         val computedHeroItems = when {
+            currentLayout == HomeLayout.MODERN -> {
+                val sources = if (selectedHeroCatalogSet.isNotEmpty()) selectedHeroRows else allHeroFallbackRows
+                // Cut off at the original catalog's top ten before release filtering.
+                val rankedSources = sources.map { row ->
+                    val eligibleIds = row.items.map { it.id }.toSet()
+                    val originalItems = catalogSnapshot[row.legacyKey()]?.items ?: row.items
+                    row.copy(items = originalItems.take(10).filter { it.id in eligibleIds })
+                }
+                selectSessionHeroes(rankedSources, heroSessionSeed)
+            }
             heroItemsFromSelectedCatalogs.isNotEmpty() -> heroItemsFromSelectedCatalogs
             fallbackHeroItemsFromSelectedCatalogs.isNotEmpty() -> fallbackHeroItemsFromSelectedCatalogs
             selectedHeroCatalogSet.isNotEmpty() -> emptyList()

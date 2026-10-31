@@ -381,6 +381,11 @@ class HomeViewModel @Inject constructor(
             observeProgressSourceChanges()
             observeCollections()
             observeInstalledAddons()
+            viewModelScope.launch {
+                HeroSession.seed.collect {
+                    if (hasAnyCatalogRows()) scheduleUpdateCatalogRows()
+                }
+            }
             observeManualAddonRefresh()
 
             // Clear CW state when profile changes so items don't leak between profiles.

@@ -5,30 +5,45 @@ import org.junit.Test
 
 class CinematicFocusPositionTest {
     @Test
-    fun verticalRoundTripKeepsTheSelectedColumn() {
-        val sizes = listOf(12, 8, 20, 10)
-        var position = CinematicFocusPosition(0, 2)
-        for (row in 1..3) {
-            position = position.moveVertically(1, sizes, true)
-            assertEquals(CinematicFocusPosition(row, 2), position)
-        }
-        for (row in 2 downTo 0) {
-            position = position.moveVertically(-1, sizes, true)
-            assertEquals(CinematicFocusPosition(row, 2), position)
-        }
+    fun verticalMovesRestoreEachRowsOwnTile() {
+        val sizes = listOf(12, 8, 20)
+        val columns = listOf(2, 4, 3)
+        var position = CinematicFocusPosition(1, 4)
+        position = position.moveVertically(1, sizes, true, columns)
+        assertEquals(CinematicFocusPosition(2, 3), position)
+        position = position.moveVertically(-1, sizes, true, columns)
+        assertEquals(CinematicFocusPosition(1, 4), position)
+        position = position.moveVertically(-1, sizes, true, columns)
+        assertEquals(CinematicFocusPosition(0, 2), position)
     }
 
     @Test
-    fun shortRowsClampWithoutLosingThePreferredColumn() {
+    fun destinationWindowCanStartAtTileFourWithoutCopyingSourceColumn() {
+        val position = CinematicFocusPosition(0, 4)
+            .moveVertically(1, listOf(12, 12), true, listOf(4, 3))
+        assertEquals(CinematicFocusPosition(1, 3), position)
+    }
+
+    @Test
+    fun horizontalMovementDoesNotChangeOtherRowsSelections() {
+        val sizes = listOf(20, 10, 30)
+        val columns = listOf(12, 3, 7)
+        var position = CinematicFocusPosition(0, 12).moveHorizontally(1, sizes)
+        assertEquals(CinematicFocusPosition(0, 13), position)
+        position = position.moveVertically(1, sizes, true, columns)
+        assertEquals(CinematicFocusPosition(1, 3), position)
+        position = position.moveVertically(1, sizes, true, columns)
+        assertEquals(CinematicFocusPosition(2, 7), position)
+    }
+
+    @Test
+    fun shortRowsClampOnlyTheirOwnRememberedTile() {
         val sizes = listOf(10, 2, 12)
-        var position = CinematicFocusPosition(0, 6)
-        position = position.moveVertically(1, sizes, true)
-        assertEquals(CinematicFocusPosition(1, 1, 6), position)
-        position = position.moveVertically(1, sizes, true)
-        assertEquals(CinematicFocusPosition(2, 6), position)
-        position = position.moveVertically(-1, sizes, true)
-        position = position.moveVertically(-1, sizes, true)
-        assertEquals(CinematicFocusPosition(0, 6), position)
+        val columns = listOf(6, 4, 8)
+        var position = CinematicFocusPosition(0, 6).moveVertically(1, sizes, true, columns)
+        assertEquals(CinematicFocusPosition(1, 1), position)
+        position = position.moveVertically(1, sizes, true, columns)
+        assertEquals(CinematicFocusPosition(2, 8), position)
     }
 
     @Test
@@ -36,40 +51,29 @@ class CinematicFocusPositionTest {
         val sizes = listOf(5, 5)
         var position = CinematicFocusPosition(1, 2)
         for (expectedRow in listOf(0, -1, -2, -2, -2)) {
-            position = position.moveVertically(-1, sizes, true)
+            position = position.moveVertically(-1, sizes, true, listOf(3, 2))
             assertEquals(expectedRow, position.row)
-            assertEquals(2, position.preferredColumn)
         }
     }
 
     @Test
     fun navigationSkipsMissingHeroAndLastRowDoesNotOverflow() {
         val sizes = listOf(5, 5)
-        var position = CinematicFocusPosition(0, 1).moveVertically(-1, sizes, false)
+        val columns = listOf(1, 3)
+        var position = CinematicFocusPosition(0, 1).moveVertically(-1, sizes, false, columns)
         assertEquals(-2, position.row)
-        position = position.moveVertically(1, sizes, false)
+        position = position.moveVertically(1, sizes, false, columns)
         assertEquals(CinematicFocusPosition(0, 1), position)
-        repeat(4) { position = position.moveVertically(1, sizes, false) }
-        assertEquals(CinematicFocusPosition(1, 1), position)
-    }
-    @Test
-    fun horizontalSelectionResetsTheColumnForSubsequentRows() {
-        val sizes = listOf(20, 10, 30)
-        var position = CinematicFocusPosition(0, 12)
-        position = position.moveVertically(1, sizes, true)
-        assertEquals(CinematicFocusPosition(1, 9, 12), position)
-        position = position.moveHorizontally(-1, sizes)
-        assertEquals(CinematicFocusPosition(1, 8, 8), position)
-        position = position.moveVertically(1, sizes, true)
-        assertEquals(CinematicFocusPosition(2, 8, 8), position)
+        repeat(4) { position = position.moveVertically(1, sizes, false, columns) }
+        assertEquals(CinematicFocusPosition(1, 3), position)
     }
 
     @Test
-    fun horizontalEdgesRemainInTheSameRow() {
+    fun unvisitedRowDefaultsToItsFirstTileAndHorizontalEdgesStayInTheirRow() {
         val sizes = listOf(3, 5)
+        assertEquals(CinematicFocusPosition(1, 0), CinematicFocusPosition(0, 2).moveVertically(1, sizes, true, emptyList()))
         assertEquals(CinematicFocusPosition(0, 0), CinematicFocusPosition(0, 0).moveHorizontally(-1, sizes))
         assertEquals(CinematicFocusPosition(0, 2), CinematicFocusPosition(0, 2).moveHorizontally(1, sizes))
         assertEquals(CinematicFocusPosition(-1, 0), CinematicFocusPosition(-1, 0).moveHorizontally(1, sizes))
     }
-
 }

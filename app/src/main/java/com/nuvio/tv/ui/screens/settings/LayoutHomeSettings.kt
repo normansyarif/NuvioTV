@@ -103,38 +103,41 @@ internal fun LayoutHomeLayoutSection(
             checked = uiState.heroSectionEnabled,
             onToggle = { onEvent(LayoutSettingsEvent.SetHeroSectionEnabled(!uiState.heroSectionEnabled)) }
         )
-        if (uiState.heroSectionEnabled && uiState.availableCatalogs.isNotEmpty()) {
-            Text(
-                text = stringResource(R.string.layout_hero_catalogs),
-                style = MaterialTheme.typography.labelLarge,
-                color = NuvioTheme.colors.TextSecondary
-            )
-            Text(
-                text = stringResource(R.string.layout_hero_catalogs_sub),
-                style = MaterialTheme.typography.bodySmall,
-                color = NuvioTheme.colors.TextTertiary
-            )
-            val firstHeroCatalogFocusRequester = remember { FocusRequester() }
-            LazyRow(
-                modifier = Modifier.settingsOptionRow(firstHeroCatalogFocusRequester),
-                contentPadding = PaddingValues(end = NuvioTheme.spacing.sm),
-                horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
-            ) {
-                itemsIndexed(
-                    items = uiState.availableCatalogs,
-                    key = { _, catalog -> catalog.key }
-                ) { catalogIndex, catalog ->
-                    CatalogChip(
-                        catalogInfo = catalog,
-                        isSelected = catalog.key in uiState.heroCatalogKeys,
-                        onClick = { onEvent(LayoutSettingsEvent.ToggleHeroCatalog(catalog.key)) },
-                        modifier = if (catalogIndex == 0) {
-                            Modifier.focusRequester(firstHeroCatalogFocusRequester)
-                        } else {
-                            Modifier
-                        }
-                    )
-                }
+    }
+    if ((uiState.selectedLayout == HomeLayout.MODERN || uiState.heroSectionEnabled) && uiState.availableCatalogs.isNotEmpty()) {
+        Text(
+            text = stringResource(R.string.layout_hero_catalogs),
+            style = MaterialTheme.typography.labelLarge,
+            color = NuvioTheme.colors.TextSecondary
+        )
+        Text(
+            text = stringResource(
+                if (uiState.selectedLayout == HomeLayout.MODERN) R.string.layout_hero_catalogs_session_sub
+                else R.string.layout_hero_catalogs_sub
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = NuvioTheme.colors.TextTertiary
+        )
+        val firstHeroCatalogFocusRequester = remember { FocusRequester() }
+        LazyRow(
+            modifier = Modifier.settingsOptionRow(firstHeroCatalogFocusRequester),
+            contentPadding = PaddingValues(end = NuvioTheme.spacing.sm),
+            horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)
+        ) {
+            itemsIndexed(
+                items = uiState.availableCatalogs,
+                key = { _, catalog -> catalog.key }
+            ) { catalogIndex, catalog ->
+                CatalogChip(
+                    catalogInfo = catalog,
+                    isSelected = catalog.key in uiState.heroCatalogKeys,
+                    onClick = { onEvent(LayoutSettingsEvent.ToggleHeroCatalog(catalog.key)) },
+                    modifier = if (catalogIndex == 0) {
+                        Modifier.focusRequester(firstHeroCatalogFocusRequester)
+                    } else {
+                        Modifier
+                    }
+                )
             }
         }
     }

@@ -1006,6 +1006,7 @@
     <string name="layout_preview_row_sub">Show a partial preview of the row below in Modern Home layout.</string>
     <string name="layout_hero_catalogs">Hero Catalogs</string>
     <string name="layout_hero_catalogs_sub">Select one or more catalogs for hero content.</string>
+    <string name="layout_hero_catalogs_session_sub">Choose hero sources. Each time you open the app, Movies and Shows randomly pick from the first 10 titles in each selected catalog, using its catalog order.</string>
     <string name="layout_section_content">Home Content</string>
     <string name="layout_section_content_desc">Control what appears on home and search.</string>
     <string name="layout_section_sidebar">Sidebar &amp; Navigation</string>

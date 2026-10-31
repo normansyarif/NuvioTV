@@ -81,8 +81,6 @@ fun CinematicHomeContent(
     }
     val hero = uiState.heroItems.firstOrNull {
         (filter == null || it.apiType == filter) && cinematicBackdropUrl(it.background, it.landscapePoster, it.poster, it.rawPosterUrl) != null
-    } ?: rows.asSequence().flatMap { it.items.list.asSequence() }.mapNotNull { it.metaPreview }.firstOrNull {
-        cinematicBackdropUrl(it.background, it.landscapePoster, it.poster, it.rawPosterUrl) != null
     }
     val failedBackdrops = remember { mutableStateMapOf<String, Boolean>() }
     fun availableBackdrop(item: ModernCarouselItem) = item.cinematicBackdropUrl()?.takeUnless { failedBackdrops[it] == true }
@@ -95,12 +93,6 @@ fun CinematicHomeContent(
     val cardRequesters = remember { mutableMapOf<Pair<String, String>, FocusRequester>() }
     fun cardRequester(rowKey: String, itemKey: String) =
         cardRequesters.getOrPut(rowKey to itemKey) { FocusRequester() }
-    var preferredColumn by remember { mutableIntStateOf(
-        rows.firstOrNull { it.key == focusState.focusedRowKey }?.items?.list
-            ?.indexOfFirst { it.key == focusState.focusedItemKeyByRow[focusState.focusedRowKey] }
-            ?.coerceAtLeast(0) ?: 0
-    ) }
-    var verticalNavigationInProgress by remember { mutableStateOf(false) }
     val verticalMoves = remember(filter) { Channel<Int>(Channel.UNLIMITED) }
     val latestRows by rememberUpdatedState(rows)
     val latestHero by rememberUpdatedState(hero)
@@ -120,51 +112,56 @@ fun CinematicHomeContent(
             val currentRows = latestRows
             val currentRow = currentRows.indexOfFirst { it.key == focusedRow }
             val selectedColumn = currentRows.getOrNull(currentRow)?.items?.list
-                ?.indexOfFirst { it.key == focusedKeys[focusedRow] }?.coerceAtLeast(0) ?: preferredColumn
-            val position = CinematicFocusPosition(currentRow, selectedColumn, preferredColumn)
+                ?.indexOfFirst { it.key == focusedKeys[focusedRow] }?.coerceAtLeast(0) ?: 0
+            val position = CinematicFocusPosition(currentRow, selectedColumn)
             val horizontalMove = kotlin.math.abs(direction) == 2
             val target = if (horizontalMove) {
                 position.moveHorizontally(direction / 2, currentRows.map { it.items.size })
-            } else position.moveVertically(direction, currentRows.map { it.items.size }, latestHero != null)
-            if (horizontalMove && target == position) continue
-            if (horizontalMove) preferredColumn = target.column
-            verticalNavigationInProgress = true
-            try {
-                when {
-                    target.row == -2 -> {
-                        column.scrollToItem(0)
-                        headerRequester.requestFocus()
-                    }
-                    target.row == -1 -> {
-                        focusedRow = null
-                        column.scrollToItem(0)
-                        withFrameNanos { }
-                        heroRequester.requestFocus()
-                    }
-                    else -> {
-                        val row = currentRows.getOrNull(target.row) ?: continue
-                        val item = row.items.list.getOrNull(target.column) ?: continue
-                        val requester = cardRequester(row.key, item.key)
-                        val rowState = rowStates.getOrPut(row.key) { LazyListState() }
-                        // Both lists move under one fixed selection anchor. Trailing
-                        // padding also lets the final tile occupy this same position.
-                        if (!horizontalMove) column.scrollToItem(target.row + if (latestHero != null) 1 else 0)
-                        withFrameNanos { }
-                        val destinationVisible = rowState.layoutInfo.visibleItemsInfo.any { it.index == target.column }
-                        if (!destinationVisible) rowState.scrollToItem(target.column)
-                        for (attempt in 0 until 30) {
-                            withFrameNanos { }
-                            if (runCatching { requester.requestFocus(FocusDirection.Enter) }.getOrDefault(false)) break
-                        }
-                        // Wait for the selected card to acquire its landscape width,
-                        // then slide it to the exact same left inset on every move.
-                        withFrameNanos { }
-                        if (horizontalMove) rowState.animateScrollToItem(target.column)
-                        else rowState.scrollToItem(target.column)
-                    }
+            } else {
+                val rowColumns = currentRows.map { row ->
+                    // Each destination owns its selection. If it has no remembered
+                    // tile, use the start of its existing window, not the source column.
+                    row.items.list.indexOfFirst { it.key == focusedKeys[row.key] }
+                        .takeIf { it >= 0 }
+                        ?: rowStates[row.key]?.firstVisibleItemIndex
+                        ?: focusState.catalogRowScrollStates[row.key]
+                        ?: 0
                 }
-            } finally {
-                verticalNavigationInProgress = false
+                position.moveVertically(direction, currentRows.map { it.items.size }, latestHero != null, rowColumns)
+            }
+            if (horizontalMove && target == position) continue
+            when {
+                target.row == -2 -> {
+                    column.scrollToItem(0)
+                    headerRequester.requestFocus()
+                }
+                target.row == -1 -> {
+                    focusedRow = null
+                    column.scrollToItem(0)
+                    withFrameNanos { }
+                    heroRequester.requestFocus()
+                }
+                else -> {
+                    val row = currentRows.getOrNull(target.row) ?: continue
+                    val item = row.items.list.getOrNull(target.column) ?: continue
+                    val requester = cardRequester(row.key, item.key)
+                    val rowState = rowStates.getOrPut(row.key) { LazyListState() }
+                    // Both lists move under one fixed selection anchor. Trailing
+                    // padding also lets the final tile occupy this same position.
+                    if (!horizontalMove) column.scrollToItem(target.row + if (latestHero != null) 1 else 0)
+                    withFrameNanos { }
+                    val destinationVisible = rowState.layoutInfo.visibleItemsInfo.any { it.index == target.column }
+                    if (!destinationVisible) rowState.scrollToItem(target.column)
+                    for (attempt in 0 until 30) {
+                        withFrameNanos { }
+                        if (runCatching { requester.requestFocus(FocusDirection.Enter) }.getOrDefault(false)) break
+                    }
+                    // Wait for the selected card to acquire its landscape width,
+                    // then slide it to the exact same left inset on every move.
+                    withFrameNanos { }
+                    if (horizontalMove) rowState.animateScrollToItem(target.column)
+                    else rowState.scrollToItem(target.column)
+                }
             }
         }
     }
@@ -247,7 +244,6 @@ fun CinematicHomeContent(
                                     .cinemaNavigation(),
                                 onFocused = {
                                     focusedRow = row.key; selectedKey = item.key; selectedIndex = index; focusedKeys[row.key] = item.key
-                                    if (!verticalNavigationInProgress) preferredColumn = index
                                     item.metaPreview?.let(onItemFocus)
                                     if (index >= row.items.list.size - 5 && row.hasMore && !row.isLoading) {
                                         row.catalogId?.let { onLoadMore(it, row.addonId.orEmpty(), row.apiType.orEmpty()) }
